@@ -102,9 +102,7 @@ class NeuroOptimizer:
 
     @staticmethod
     def print_available_optimizers():
-        """
-        Prints a catalog of all available metaheuristic algorithms supported by this library.
-        """
+
         algos = {
             "Adam": {"name": "Adaptive Moment Estimation", "strength": "Gradient-based (Backprop). The industry standard baseline."},
             "GWO":  {"name": "Grey Wolf Optimizer", "strength": "Balanced. Good general purpose."},
@@ -156,7 +154,8 @@ class NeuroOptimizer:
             loss = self.criterion(y_pred, self.y_train)
         return loss.item()
 
-    def search_weights(self, optimizer_name='GWO', epochs=20, population=30, learning_rate=0.01):
+    def search_weights(self, optimizer_name='GWO', epochs=20, population=30, learning_rate=0.01,
+                       verbose=False):
         """
         Executes the optimization process using the specified algorithm.
         Supports: Adam, GWO, PSO, DE, WOA, GA, ABC, SMO, SMA, HHO.
@@ -167,7 +166,7 @@ class NeuroOptimizer:
         
         # --- CAS SPÉCIAL : ADAM (Gradient Descent) ---
         if optimizer_name == "Adam":
-            print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
+            if verbose :print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
             model = DynamicNet(layers_cfg=self.Layers)
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
             
@@ -182,14 +181,14 @@ class NeuroOptimizer:
                 # Optional: print log occasionally
                 # if epoch % 10 == 0: print(f"Epoch {epoch}: Loss {loss.item():.4f}")
             
-            print(f"Finished! Final Train Loss: {loss.item():.4f}")
+            if verbose :print(f"Finished! Final Train Loss: {loss.item():.4f}")
             return model # On retourne directement le modèle entraîné
 
         # --- CAS GÉNÉRAL : MÉTAHEURISTIQUES (Mealpy) ---
         dummy_model = DynamicNet(layers_cfg=self.Layers)
         n_params = dummy_model.count_parameters()
         
-        print(f"Architecture defined. Number of weights to optimize: {n_params}")
+        if verbose :print(f"Architecture defined. Number of weights to optimize: {n_params}")
         if n_params > 5000:
             print("WARNING: Above 5000 parameters, swarm algorithms converge very poorly.")
 
@@ -200,7 +199,9 @@ class NeuroOptimizer:
             "obj_func": self.fitness_function,
             "bounds": FloatVar(lb=lb, ub=ub),
             "minmax": "min",
-            "verbose": False # Mis à False pour alléger la console lors de la boucle
+            "verbose": False,         
+            "log_to": None,           
+            "save_population": False,
         }
         
         term_dict = {
@@ -226,16 +227,16 @@ class NeuroOptimizer:
         elif optimizer_name == "HHO": 
             model_opt = HHO.OriginalHHO(epoch=epochs, pop_size=population)
         else:
-            print(f"❌ Algorithm {optimizer_name} unknown. Fallback to GWO.")
+            print(f"Algorithm {optimizer_name} unknown. Fallback to GWO.")
             model_opt = GWO.OriginalGWO(epoch=epochs, pop_size=population)
 
-        print(f"Starting Neuro-evolution ({optimizer_name})...")
+        if verbose :print(f"Starting Neuro-evolution ({optimizer_name})...")
         best_agent = model_opt.solve(problem, termination=term_dict)
         
         best_position = best_agent.solution
         best_fitness = best_agent.target.fitness
         
-        print(f"Finished! Best Train Loss: {best_fitness:.4f}")
+        if verbose :print(f"Finished! Best Train Loss: {best_fitness:.4f}")
         
         # On charge les meilleurs poids dans le modèle
         dummy_model.load_flattened_weights(best_position)
@@ -264,8 +265,9 @@ class NeuroOptimizer:
             
         return layers
 
-    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', 
-                     epochs_weights=10, population_weights=20, learning_rate_weights=0.01):
+    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
+                     epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
+                     verbose=False, verbose_weights=False):
         """
         Neural Architecture Search (NAS) basique type Hill-Climbing.
         Modifie aléatoirement l'architecture et garde les changements qui améliorent la performance.
@@ -274,26 +276,27 @@ class NeuroOptimizer:
         import copy
         
         START = time.time()
-        print(f"\n🚀 Démarrage de la recherche d'architecture (NAS)...")
+        if verbose :print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
         # 1. Optimisation initiale (Baseline)
-        print("  -> Évaluation de l'architecture de départ...")
+        if verbose :print("  -> Évaluation de l'architecture de départ...")
         # On utilise search_weights sur l'objet actuel
         start_model = self.search_weights(optimizer_name=optimizer_name_weights, 
                                         epochs=epochs_weights, 
-                                        population=population_weights)
+                                        population=population_weights,
+                                        verbose=verbose_weights)
         
         best_score = self.evaluate(start_model)
         best_model = start_model
         # CRITIQUE : Deepcopy pour ne pas modifier l'original par erreur
         best_layers = copy.deepcopy(self.Layers) 
 
-        print(f"  -> Score initial (Loss) : {best_score:.4f}")
+        if verbose :print(f"  -> Score initial (Loss) : {best_score:.4f}")
         new_layers=copy.deepcopy(self.Layers) 
         ITER = 0
-        while ITER < epochs and (time.time() - START) < train_time:
+        while ITER < epochs and (time.time() - START) < train_time and best_score>-accuracy_target:
             ITER += 1
-            print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
+            if verbose :print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
             
             # On part de la meilleure config connue
             if rd.random()<0.6: new_layers = copy.deepcopy(best_layers)
@@ -316,7 +319,7 @@ class NeuroOptimizer:
                 # Garde-fou : pas moins de 4 neurones
                 if new_val > 4:
                     new_layers[idx].out_features = new_val
-                    print(f"  Action: Modification couche {idx} -> {new_val} neurones")
+                    if verbose :print(f"  Action: Modification couche {idx} -> {new_val} neurones")
                     mutated = True
 
             # --- CAS 2 : Ajouter une couche ---
@@ -327,7 +330,7 @@ class NeuroOptimizer:
                 # On crée une couche "tampon", les dimensions seront corrigées par _reconnect_layers
                 new_layer = LinearCfg(in_features=1, out_features=new_neurons, activation=nn.ReLU)
                 new_layers.insert(insert_idx, new_layer)
-                print(f"  Action: Ajout d'une couche de {new_neurons} neurones à l'index {insert_idx}")
+                if verbose :print(f"  Action: Ajout d'une couche de {new_neurons} neurones à l'index {insert_idx}")
                 mutated = True
 
             # --- CAS 3 : Supprimer une couche ---
@@ -335,11 +338,11 @@ class NeuroOptimizer:
                 # On ne supprime pas s'il ne reste qu'une seule couche cachée
                 idx = random.choice(linear_indices)
                 del new_layers[idx]
-                print(f"  Action: Suppression de la couche {idx}")
+                if verbose :print(f"  Action: Suppression de la couche {idx}")
                 mutated = True
 
             if not mutated:
-                print("  (Pas de mutation valide trouvée, on passe)")
+                if verbose :print("  (Pas de mutation valide trouvée, on passe)")
                 continue
 
             # CRITIQUE : On répare les connexions (in_features == out_features précédent)
@@ -360,21 +363,21 @@ class NeuroOptimizer:
                 
                 # Évaluation
                 new_score = self.evaluate(temp_model)
-                print(f"  -> Nouveau Score : {new_score:.4f} (Meilleur : {best_score:.4f})")
+                if verbose :print(f"  -> Nouveau Score : {new_score:.4f} (Meilleur : {best_score:.4f})")
 
                 # 3. Acceptation ou Rejet (Hill Climbing)
                 if new_score < best_score:
-                    print(" AMÉLIORATION ! Architecture adoptée.")
+                    if verbose :print(" AMÉLIORATION ! Architecture adoptée.")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
                     # On met à jour l'objet actuel pour qu'il garde la meilleure config
                     self.Layers = best_layers
                 else:
-                    print("Rejeté.")
+                    if verbose :print("Rejeté.")
             
             except Exception as e:
-                print(f" Crash architecture invalide : {e}")
+                if verbose :print(f" Crash architecture invalide : {e}")
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
@@ -382,53 +385,3 @@ class NeuroOptimizer:
         
         
         
-
-if __name__ == "__main__":
-    from sklearn.datasets import make_classification,make_blobs
-    import matplotlib.pyplot as plt 
-    
-
-    X, y = make_classification(n_samples=2000, n_features=50, n_informative=5, n_classes=4)
-    #X, y = make_blobs(n_samples=200)
-    X_tensor = torch.tensor(X, dtype=torch.float32)
-    y_tensor = torch.tensor(y, dtype=torch.float32)
-    neuro_opt = NeuroOptimizer(X, y, task="classification")
-    model = neuro_opt.search_model(optimizer_name_weights='Adam', epochs=2000,  train_time=10*60, epochs_weights=30, population_weights=50)
-    """
-    Res={}
-    
-    for opt in NeuroOptimizer.get_available_optimizers():
-        neuro_opt = NeuroOptimizer(X, y, task="classification")
-        
-    
-        model = neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=50)
-    
-        
-    
-        with torch.no_grad():
-            logits = model(X_tensor)
-            _, predictions = torch.max(logits, 1)
-            test_loss = accuracy_score(predictions, y_tensor)
-            Res[opt]=test_loss
-    print(Res)
-    """
-    with torch.no_grad():
-        logits = model(X_tensor)
-        _, predictions = torch.max(logits, 1)
-        test_loss = accuracy_score(predictions, y_tensor)
-    
-    print(test_loss)
-    predictions = predictions.numpy()
-    
-    if X.shape[1] == 2:
-        plt.figure(figsize=(10, 5))
-        
-        plt.subplot(1, 2, 1)
-        plt.title("Ground Truth")
-        plt.scatter(X[:, 0], X[:, 1], c=y, cmap='viridis', edgecolor='k')
-        
-        plt.subplot(1, 2, 2)
-        plt.title("Neuro-Evolution Predictions")
-        plt.scatter(X[:, 0], X[:, 1], c=predictions, cmap='viridis', edgecolor='k')
-        
-        plt.show()
