@@ -87,7 +87,7 @@ Breast Cancer       HHO         96.49            7.70        0.0700        0.53 
 ```
 
 ### make_moons (n=2000, noise=0.3) | 20 Runs Average
-
+```python
 X, y = make_moons(n_samples=2000, noise=0.3)
 neuro_opt = NeuroOptimizer(X, y, task="classification")
 
@@ -98,6 +98,7 @@ model = neuro_opt.search_model(
     epochs_weights=10,          
     population_weights=20,              
 )
+```
 ```md
 ====================================================================================================
 ALGORITHM       | AVG ACCURACY    | STD DEV    | AVG INF TIME (ms)    | BEST ACC  
@@ -114,15 +115,17 @@ SMA             |   84.79%        | ±2.12%   |     0.6004 ms        |  89.25%
 Adam            |   83.88%        | ±1.87%   |     0.3001 ms        |  88.05%
 ====================================================================================================
 ```
-
+```python
 model = neuro_opt.search_model(
     optimizer_name_weights=opt, 
     epochs=10,                   
     train_time=60,             
     epochs_weights=10,          
     population_weights=20, 
-    
+   
 )
+```
+```md
 ====================================================================================================
 ALGORITHM       | AVG ACCURACY    | STD DEV    | AVG INF TIME (ms)    | BEST ACC  
 ----------------------------------------------------------------------------------------------------
@@ -138,13 +141,14 @@ SMA             |   85.37%        | ±1.85%   |     0.6266 ms        |  88.65%
 Adam            |   84.99%        | ±1.00%   |     0.6017 ms        |  87.05%
 ====================================================================================================
 
+```
 
-
-
+```python
 neuro_opt = NeuroOptimizer(X, y, task="classification")
 model=neuro_opt.search_model(optimizer_name_weights='Adam', epochs=20,  train_time=60,
                                 epochs_weights=20, population_weights=20,
                                 time_importance=time_importance)
+```
 ![alt text](image-1.png)
 ![alt text](image-2.png)
 
