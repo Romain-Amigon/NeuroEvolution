@@ -5,9 +5,9 @@ Created on Sat Dec 13 12:12:01 2025
 @author: Romain
 """
 
-from main import  NeuroOptimizer
+from NeuroEvolution import  NeuroOptimizer
 import torch
-from layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg
+from NeuroEvolution.layer_classes import Conv2dCfg,DropoutCfg,FlattenCfg,LinearCfg
 import torch.nn as nn
 from sklearn.metrics import accuracy_score
 import time
@@ -22,18 +22,13 @@ if __name__ == "__main__":
 
     X, y = make_classification(n_samples=2000, n_features=50, n_informative=5, n_classes=4)
     #X, y = make_blobs(n_samples=200)
-    X, y = make_moons(n_samples=500, noise=0.3)
+    X, y = make_moons(n_samples=2000, noise=0.3)
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
-    """
-    Layers = [
-        LinearCfg(X.shape[1], 16, nn.ReLU),
-        *[LinearCfg(16, 16, nn.ReLU) for _ in range(5)],
-        LinearCfg(16, 2, None),
-    ]
     
-    neuro_opt = NeuroOptimizer(X, y, task="classification", Layers = Layers)
-    model = neuro_opt.search_model(optimizer_name_weights='Adam', epochs=2000,  train_time=10*60, epochs_weights=30, population_weights=50)
+
+    neuro_opt = NeuroOptimizer(X, y, task="classification")
+    model = neuro_opt.search_model(optimizer_name_weights='GWO', epochs=20,  train_time=10*60, epochs_weights=20, population_weights=20)
     """
     Res={}
     neuro_opt = NeuroOptimizer(X, y, task="classification")
@@ -55,7 +50,7 @@ if __name__ == "__main__":
             test_loss = accuracy_score(predictions, y_tensor)
             Res[opt]=(test_loss,inf_time)
     print(Res)
-    
+    """
     with torch.no_grad():
         logits = model(X_tensor)
         _, predictions = torch.max(logits, 1)

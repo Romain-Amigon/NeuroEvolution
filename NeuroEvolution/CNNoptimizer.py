@@ -15,7 +15,7 @@ from mealpy.bio_based import SMA
 from mealpy.evolutionary_based import GA, DE
 from mealpy.physics_based import SA
 
-from layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg
+from .layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg
 
 class DynamicNet(nn.Module):
     """
@@ -332,9 +332,8 @@ class NeuroOptimizer:
         START = time.time()
         if verbose :print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
-        # 1. Optimisation initiale (Baseline)
+
         if verbose :print("  -> Évaluation de l'architecture de départ...")
-        # On utilise search_weights sur l'objet actuel
         start_model = self.search_weights(optimizer_name=optimizer_name_weights, 
                                         epochs=epochs_weights, 
                                         population=population_weights,
@@ -342,7 +341,6 @@ class NeuroOptimizer:
         
         best_score = self.evaluate(start_model , time_importance=time_importance)
         best_model = start_model
-        # CRITIQUE : Deepcopy pour ne pas modifier l'original par erreur
         best_layers = copy.deepcopy(self.Layers) 
 
         if verbose :print(f"  -> Score initial (Loss) : {best_score:.4f}")
@@ -352,44 +350,42 @@ class NeuroOptimizer:
             ITER += 1
             if verbose :print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
             
-            # On part de la meilleure config connue
+           
             if rd.random()<0.6: new_layers = copy.deepcopy(best_layers)
             elif rd.random()<0.5: new_layers = copy.deepcopy(new_layers)
             else: new_layers = copy.deepcopy(self.Layers)
             
-            # CHOIX DE LA MUTATION
+        
             mutation_type = random.choice(["change_neurons", "add_layer", "remove_layer"])
             
-            # On filtre pour ne garder que les couches Linéaires modifiables (on exclut souvent la dernière couche de sortie)
             linear_indices = [i for i, l in enumerate(new_layers[:-1]) if isinstance(l, LinearCfg)]
             
             mutated = False
 
-            # --- CAS 1 : Changer le nombre de neurones ---
+
             if mutation_type == "change_neurons" and len(linear_indices) > 0:
                 idx = random.choice(linear_indices)
                 noise = random.randint(-16, 16)
                 new_val = new_layers[idx].out_features + noise
-                # Garde-fou : pas moins de 4 neurones
+               
                 if new_val > 4:
                     new_layers[idx].out_features = new_val
                     if verbose :print(f"  Action: Modification couche {idx} -> {new_val} neurones")
                     mutated = True
 
-            # --- CAS 2 : Ajouter une couche ---
+
             elif mutation_type == "add_layer":
-                # On insère une couche aléatoire au milieu
+
                 insert_idx = random.randint(0, len(new_layers) - 1)
                 new_neurons = random.randint(16, 64)
-                # On crée une couche "tampon", les dimensions seront corrigées par _reconnect_layers
+               
                 new_layer = LinearCfg(in_features=1, out_features=new_neurons, activation=nn.ReLU)
                 new_layers.insert(insert_idx, new_layer)
                 if verbose :print(f"  Action: Ajout d'une couche de {new_neurons} neurones à l'index {insert_idx}")
                 mutated = True
 
-            # --- CAS 3 : Supprimer une couche ---
             elif mutation_type == "remove_layer" and len(linear_indices) > 1:
-                # On ne supprime pas s'il ne reste qu'une seule couche cachée
+                
                 idx = random.choice(linear_indices)
                 del new_layers[idx]
                 if verbose :print(f"  Action: Suppression de la couche {idx}")
@@ -399,17 +395,14 @@ class NeuroOptimizer:
                 if verbose :print("  (Pas de mutation valide trouvée, on passe)")
                 continue
 
-            # CRITIQUE : On répare les connexions (in_features == out_features précédent)
+
             new_layers = self._reconnect_layers(new_layers)
 
-            # 2. Évaluation de la nouvelle architecture
-            # On crée une instance temporaire juste pour tester cette config
-            # Attention à bien passer 'task' (syntaxe corrigée: task=self.task)
+
             temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
                                           Layers=new_layers, task=self.task)
             
-            # On optimise les poids de cette nouvelle architecture
-            # On réduit un peu les époques pour aller plus vite pendant la recherche NAS ?
+
             try:
                 temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
                                                          epochs=epochs_weights, 
@@ -419,13 +412,12 @@ class NeuroOptimizer:
                 new_score = self.evaluate(temp_model, time_importance=time_importance)
                 if verbose :print(f"  -> Nouveau Score : {new_score:.4f} (Meilleur : {best_score:.4f})")
 
-                # 3. Acceptation ou Rejet (Hill Climbing)
                 if new_score < best_score:
                     if verbose :print(" AMÉLIORATION ! Architecture adoptée.")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
-                    # On met à jour l'objet actuel pour qu'il garde la meilleure config
+                    
                     self.Layers = best_layers
                 else:
                     if verbose :print("Rejeté.")
