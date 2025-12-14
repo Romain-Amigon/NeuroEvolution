@@ -124,18 +124,72 @@ class NeuroOptimizer:
         print("="*110 + "\n")
 
 
-    def evaluate(self, model , verbose=False):
+    def evaluate(self, model, verbose=False, time_importance=None):
+        """
+        Evaluates the candidate model on the test dataset, computing a composite score based on 
+        predictive performance and inference latency.
+
+        This method performs a forward pass to measure the inference time (latency) and calculates 
+        the standard performance metric for the specific task (Accuracy for classification, 
+        MSE for regression). The final returned value is designed to be **minimized** by the 
+        optimization algorithm.
+
+        Args:
+            model (nn.Module): The PyTorch neural network model to be evaluated.
+            verbose (bool, optional): If True, prints the evaluation metrics (Accuracy/Loss 
+                and Inference Time) to the standard output. Defaults to False.
+            time_importance (callable, optional): A custom objective function that defines 
+                the trade-off between performance and speed. 
+                It must accept two float arguments: `(metric, inference_time)` and return a `float` score.
+                - For Classification: `metric` is the Accuracy (between 0.0 and 1.0).
+                - For Regression: `metric` is the MSE Loss.
+                If None, loss is returned.
+                
+                ex :
+                    def time_importance(loss, time):
+                        return loss-time*10
+
+        Returns:
+            float: A scalar score representing the "cost" of the model (lower is better).
+                - Default for Classification: :math:`-Accuracy + (Time \\times 10)`
+                - Default for Regression: :math:`MSE + (Time \\times 10)`
+        """
+            
+        # warmup
+        if self.X_test.is_cuda:
+            torch.cuda.synchronize() 
+
+        start = time.time()
         with torch.no_grad():
             outputs = model(self.X_test)
-            if self.task == "classification":
-                _, predicted = torch.max(outputs.data, 1)
-                acc = accuracy_score(self.y_test, predicted)
-                if verbose :print(f"Accuracy: {acc*100:.2f}%")
-                return -acc
-            else:
-                test_loss = self.criterion(outputs, self.y_test)
-                if verbose :print(f"{self.criterion} : {test_loss.item():.4f}")
-                return test_loss
+        
+        if self.X_test.is_cuda:
+            torch.cuda.synchronize()
+            
+        inference_time = time.time() - start
+
+        if self.task == "classification":
+            _, predicted = torch.max(outputs.data, 1)
+            acc = float(accuracy_score(self.y_test.cpu(), predicted.cpu()))
+            
+            if verbose:
+                print(f"   [Eval] Acc: {acc*100:.2f}% | Time: {inference_time*1000:.4f}ms")
+
+            if time_importance:
+                return time_importance(acc, inference_time)
+
+            return -acc 
+
+        else: # Regression
+            mse_loss = self.criterion(outputs, self.y_test).item()
+            
+            if verbose:
+                print(f"   [Eval] MSE: {mse_loss:.4f} | Time: {inference_time*1000:.4f}ms")
+
+            if time_importance:
+                return time_importance(mse_loss, inference_time)
+            
+            return mse_loss 
 
     @staticmethod
     def get_available_optimizers():
@@ -267,7 +321,7 @@ class NeuroOptimizer:
 
     def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
-                     verbose=False, verbose_weights=False):
+                     verbose=False, verbose_weights=False, time_importance=None):
         """
         Neural Architecture Search (NAS) basique type Hill-Climbing.
         Modifie aléatoirement l'architecture et garde les changements qui améliorent la performance.
@@ -286,7 +340,7 @@ class NeuroOptimizer:
                                         population=population_weights,
                                         verbose=verbose_weights)
         
-        best_score = self.evaluate(start_model)
+        best_score = self.evaluate(start_model , time_importance=time_importance)
         best_model = start_model
         # CRITIQUE : Deepcopy pour ne pas modifier l'original par erreur
         best_layers = copy.deepcopy(self.Layers) 
@@ -362,7 +416,7 @@ class NeuroOptimizer:
                                                          population=population_weights)
                 
                 # Évaluation
-                new_score = self.evaluate(temp_model)
+                new_score = self.evaluate(temp_model, time_importance=time_importance)
                 if verbose :print(f"  -> Nouveau Score : {new_score:.4f} (Meilleur : {best_score:.4f})")
 
                 # 3. Acceptation ou Rejet (Hill Climbing)

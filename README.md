@@ -1,9 +1,7 @@
-<<<<<<< HEAD
 # MetaLearning
 
 
-search_weights
-
+## Iris, Wine & Breast Cancer
 
 Layers = [LinearCfg(self.n_features, 16, nn.ReLU), LinearCfg(16, self.output_dim, None)  ]
 model = neuro_opt.search_weights(optimizer_name=algo_choice, epochs=30, population=20)
@@ -81,6 +79,33 @@ Breast Cancer       SMA         96.49          165.34        0.0451        0.30 
 Breast Cancer       HHO         96.49            7.70        0.0700        0.53     0.0005
 ====================================================================================================
 
-=======
-# NeuroEvolution
->>>>>>> d92b6d6b691b799eb0029bb089ea6cdc2fcd0d98
+
+## BENCHMARK: make_moons (n=2000, noise=0.3) | 20 Runs Average
+
+X, y = make_moons(n_samples=2000, noise=0.3)
+neuro_opt = NeuroOptimizer(X, y, task="classification")
+
+model = neuro_opt.search_model(
+    optimizer_name_weights=opt, 
+    epochs=5,                   
+    train_time=60,             
+    epochs_weights=10,          
+    population_weights=20, 
+    time_importance=time_importance,
+    verbose=False               
+)
+
+====================================================================================================
+ALGORITHM       | AVG ACCURACY    | STD DEV    | AVG INF TIME (ms)    | BEST ACC  
+----------------------------------------------------------------------------------------------------
+GWO             |   87.28%        | ±1.49%   |     0.2502 ms        |  89.95%
+WOA             |   86.48%        | ±1.35%   |     0.5262 ms        |  90.15%
+PSO             |   86.29%        | ±1.41%   |     0.2500 ms        |  88.75%
+DE              |   86.06%        | ±1.49%   |     0.3985 ms        |  89.95%
+SMO             |   85.78%        | ±1.37%   |     0.3003 ms        |  89.80%
+ABC             |   85.78%        | ±1.03%   |     0.2485 ms        |  87.55%
+HHO             |   85.04%        | ±1.57%   |     0.4988 ms        |  88.80%
+GA              |   85.01%        | ±1.97%   |     0.3985 ms        |  89.40%
+SMA             |   84.79%        | ±2.12%   |     0.6004 ms        |  89.25%
+Adam            |   83.88%        | ±1.87%   |     0.3001 ms        |  88.05%
+====================================================================================================
