@@ -6,6 +6,7 @@
 ## Benchmark : Classification 
 ### Iris, Wine & Breast Cancer
 
+```md
 Layers = [LinearCfg(self.n_features, 16, nn.ReLU), LinearCfg(16, self.output_dim, None)  ]
 model = neuro_opt.search_weights(optimizer_name=algo_choice, epochs=30, population=20)
 ====================================================================================================
@@ -43,7 +44,9 @@ Breast Cancer       SMA         83.33            7.81        0.0361        0.53 
          Wine       HHO         80.56            0.96        0.0801        0.28     0.0003
 Breast Cancer       HHO         94.74            1.33        0.0801        0.53     0.0005
 ====================================================================================================
+```
 
+```md
 
 model = neuro_opt.search_model(optimizer_name_weights=algo_choice, epochs=30)
 ====================================================================================================
@@ -81,7 +84,7 @@ Breast Cancer       SMA         96.49          165.34        0.0451        0.30 
          Wine       HHO         88.89            8.97        0.0451        0.28     0.0003
 Breast Cancer       HHO         96.49            7.70        0.0700        0.53     0.0005
 ====================================================================================================
-
+```
 
 ### make_moons (n=2000, noise=0.3) | 20 Runs Average
 
@@ -95,7 +98,7 @@ model = neuro_opt.search_model(
     epochs_weights=10,          
     population_weights=20,              
 )
-
+```md
 ====================================================================================================
 ALGORITHM       | AVG ACCURACY    | STD DEV    | AVG INF TIME (ms)    | BEST ACC  
 ----------------------------------------------------------------------------------------------------
@@ -110,6 +113,7 @@ GA              |   85.01%        | ±1.97%   |     0.3985 ms        |  89.40%
 SMA             |   84.79%        | ±2.12%   |     0.6004 ms        |  89.25%
 Adam            |   83.88%        | ±1.87%   |     0.3001 ms        |  88.05%
 ====================================================================================================
+```
 
 model = neuro_opt.search_model(
     optimizer_name_weights=opt, 
