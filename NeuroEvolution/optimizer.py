@@ -124,6 +124,26 @@ class DynamicNet(nn.Module):
     
         return loss_value, inference_time
     
+    def get_layer_ranges(self):
+        """
+        Retourne une liste de tuples (start_idx, end_idx) pour chaque couche 
+        qui possède des paramètres (Linear, Conv2d).
+        """
+        ranges = []
+        current_idx = 0
+        
+
+        for layer in self.net:
+            nb_params = sum(p.numel() for p in layer.parameters())
+            
+            if nb_params > 0:
+                ranges.append((current_idx, current_idx + nb_params))
+                current_idx += nb_params
+            else:
+                ranges.append(None)
+                
+        return ranges
+    
 
 
 class NeuroOptimizer:
@@ -287,7 +307,6 @@ class NeuroOptimizer:
             learning_rate (float): Only used if optimizer_name is 'Adam'.
         """
         
-        # --- CAS SPÉCIAL : ADAM (Gradient Descent) ---
         if optimizer_name == "Adam":
             if verbose :print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
             model = DynamicNet(layers_cfg=self.Layers)
@@ -301,22 +320,58 @@ class NeuroOptimizer:
                 loss.backward()
                 optimizer.step()
                 
-                # Optional: print log occasionally
                 # if epoch % 10 == 0: print(f"Epoch {epoch}: Loss {loss.item():.4f}")
             
             if verbose :print(f"Finished! Final Train Loss: {loss.item():.4f}")
             return model # On retourne directement le modèle entraîné
 
-        # --- CAS GÉNÉRAL : MÉTAHEURISTIQUES (Mealpy) ---
         dummy_model = DynamicNet(layers_cfg=self.Layers)
         n_params = dummy_model.count_parameters()
         
-        if verbose :print(f"Architecture defined. Number of weights to optimize: {n_params}")
-        if n_params > 5000:
-            print("WARNING: Above 5000 parameters, swarm algorithms converge very poorly.")
+        current_weights = dummy_model.flatten_weights(to_numpy=True)
 
-        lb = [-1.0] * n_params
-        ub = [ 1.0] * n_params
+        active_indices = []
+        is_partial_opt = False
+
+        if n_params > 5000:
+            if verbose: 
+                print(f"⚠️ Large Model ({n_params} params). Switching to Layer-wise Optimization.")
+            
+            is_partial_opt = True
+            
+            ranges = dummy_model.get_layer_ranges()
+            valid_layers_indices = [i for i, r in enumerate(ranges) if r is not None]
+
+            n_layers_to_optim = max(1, int(len(valid_layers_indices) * 0.3)) 
+            chosen_layers = rd.sample(valid_layers_indices, n_layers_to_optim)
+            
+            if verbose: print(f"Selected layers indices for optimization: {chosen_layers}")
+
+
+            active_indices_list = []
+            for l_idx in chosen_layers:
+                start, end = ranges[l_idx]
+                active_indices_list.extend(range(start, end))
+            
+            active_indices = np.array(active_indices_list)
+            
+            initial_active_weights = current_weights[active_indices]
+            
+            n_active_params = len(active_indices)
+            lb = [-1.0] * n_active_params
+            ub = [ 1.0] * n_active_params
+            
+            if verbose: print(f"Optimizing {n_active_params} parameters (subset) instead of {n_params}.")
+            
+
+            def objective_func(solution):
+                return self._partial_fitness_wrapper(solution, current_weights, active_indices)
+
+        else:
+            # Cas normal (< 5000 params) : on optimise tout
+            lb = [-1.0] * n_params
+            ub = [ 1.0] * n_params
+            objective_func = self.fitness_function
         
         problem = {
             "obj_func": self.fitness_function,
@@ -328,7 +383,7 @@ class NeuroOptimizer:
         }
         
         term_dict = {
-           "max_early_stop": 15  # after 30 epochs, if the global best doesn't improve then we stop the program
+           "max_early_stop": 30
         }
 
         if optimizer_name == "GWO":
@@ -359,10 +414,16 @@ class NeuroOptimizer:
         best_position = best_agent.solution
         best_fitness = best_agent.target.fitness
         
+        if is_partial_opt:
+            final_weights = current_weights.copy()
+            np.put(final_weights, active_indices, best_position)
+        else:
+            final_weights = best_position
+        
         if verbose :print(f"Finished! Best Train Loss: {best_fitness:.4f}")
         
         # On charge les meilleurs poids dans le modèle
-        dummy_model.load_flattened_weights(best_position)
+        dummy_model.load_flattened_weights(final_weights)
         return dummy_model
     
     
@@ -656,19 +717,34 @@ class NeuroOptimizer:
                 if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
 
                 if new_score < best_score:
-                    if verbose: print("  ✅ AMÉLIORATION !")
+                    if verbose: print("  AMÉLIORATION !")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
                     self.Layers = best_layers
                 else:
-                    if verbose: print("  ❌ Rejeté.")
+                    if verbose: print("  Rejeté.")
             
             except Exception as e:
-                if verbose: print(f"  ⚠️ Crash architecture : {e}")
+                if verbose: print(f"  Crash architecture : {e}")
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
+    
+    
+    def _partial_fitness_wrapper(self, active_solution, base_weights, active_indices):
+        """
+        Reconstruit le vecteur complet à partir de la solution partielle (active)
+        et des poids figés (base), puis calcule la loss.
+        """
+        # 1. Copie des poids de base (figés)
+        full_weights = base_weights.copy()
+        
+        # 2. Injection des nouveaux poids optimisés aux bons endroits
+        # active_solution est un vecteur plat, active_indices sont les positions dans le vecteur global
+        np.put(full_weights, active_indices, active_solution)
+
+        return self.fitness_function(full_weights)
     
     
 

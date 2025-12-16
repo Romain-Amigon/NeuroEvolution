@@ -1,7 +1,23 @@
-# MetaLearning
+# NeuroEvoluion
+NeurooEvoluion: Evolutionary Neural Architecture Search & Weight Optimization
+NeurooEvoluion is a high-level Python library designed to explore the intersection of Deep Learning and Metaheuristic Optimization. It allows users to optimize neural network weights using Swarm Intelligence (SI) and Evolutionary Algorithms (EA) instead of traditional Gradient Descent, and performs Neural Architecture Search (NAS) to discover efficient model structures dynamically.
+
+Built on top of PyTorch and Mealpy.
 
 
+---
+## Key Features
+Gradient-Free Optimization: Train neural networks without backpropagation using algorithms like Genetic Algorithms (GA), Particle Swarm Optimization (PSO), Grey Wolf Optimizer (GWO), and more.
 
+Dynamic Architecture Search (NAS): Automatically evolve network architectures (add/remove layers, adjust neurons/kernels) to find the best trade-off between performance and complexity.
+
+Hardware-Aware Evaluation: Optimize models not just for accuracy/loss, but also for Inference Latency using multi-objective fitness functions.
+
+Plug-and-Play: Seamless integration with Scikit-Learn style API (fit/predict paradigm).
+
+Wide Algorithm Support: Access to 10+ state-of-the-art metaheuristics via Mealpy.
+
+---
 
 ## Benchmark : Classification 
 ### Iris, Wine & Breast Cancer
@@ -244,3 +260,65 @@ ABC         0.1747              0.2460
 SMO         0.2332              0.2454
 SMA         0.2532              0.2627
 HHO         0.2721              0.1358
+
+``` md
+====================================================================================================
+📊 RÉSULTATS DU BENCHMARK
+====================================================================================================
+             Dataset Algo            Mode  Accuracy  Train Time (s)  Inf Time (ms)
+        Digits (8x8)  ABC   NAS (Evolved)    0.1111          7.1849         1.0071
+        Digits (8x8)  ABC Weights (Fixed)    0.1056          6.4637         0.9966
+
+        Digits (8x8) Adam   NAS (Evolved)    0.9583          0.1828         0.0000
+        Digits (8x8) Adam Weights (Fixed)    0.9583          0.1626         1.0056
+
+        Digits (8x8)   DE   NAS (Evolved)    0.1028          3.4276         1.0009
+        Digits (8x8)   DE Weights (Fixed)    0.1278          3.3676         1.0014
+
+        Digits (8x8)   GA   NAS (Evolved)    0.1361          3.8615         1.5094
+        Digits (8x8)   GA Weights (Fixed)    0.0806          3.6658         0.0000
+        
+        Digits (8x8)  GWO   NAS (Evolved)    0.1667          4.2136         1.0002
+        Digits (8x8)  GWO Weights (Fixed)    0.3500          4.6753         2.0032
+
+        Digits (8x8)  HHO   NAS (Evolved)    0.1222          6.7114         1.0071
+        Digits (8x8)  HHO Weights (Fixed)    0.1250          6.2650         0.9999
+
+        Digits (8x8)  PSO   NAS (Evolved)    0.1333          6.6804         0.0000
+        Digits (8x8)  PSO Weights (Fixed)    0.0972          5.9419         0.0000
+
+        Digits (8x8)  SMA   NAS (Evolved)    0.1861        188.2196         1.0016
+        Digits (8x8)  SMA Weights (Fixed)    0.2056        179.5234         0.0000
+
+        Digits (8x8)  SMO   NAS (Evolved)    0.0806          8.1273         2.0084
+        Digits (8x8)  SMO Weights (Fixed)    0.1389          7.4610         1.0035
+
+        Digits (8x8)  WOA   NAS (Evolved)    0.0944          3.6672         0.0000
+        Digits (8x8)  WOA Weights (Fixed)    0.2000          4.3089         2.9955
+
+FashionMNIST (28x28)  ABC   NAS (Evolved)    0.0725         58.2891         8.0380
+FashionMNIST (28x28)  ABC Weights (Fixed)    0.1150         57.6505         6.0019
+
+FashionMNIST (28x28) Adam   NAS (Evolved)    0.7875          1.8577         7.5350
+FashionMNIST (28x28) Adam Weights (Fixed)    0.7675          1.9463         5.0027
+
+FashionMNIST (28x28)   DE   NAS (Evolved)    0.1375         28.8300         3.5248
+FashionMNIST (28x28)   DE Weights (Fixed)    0.0925         29.7496         5.5254
+
+FashionMNIST (28x28)   GA   NAS (Evolved)    0.1975         37.2505         6.5241
+FashionMNIST (28x28)   GA Weights (Fixed)    0.0950         35.5957         5.0051
+
+FashionMNIST (28x28)  GWO   NAS (Evolved)    0.1225         34.8034         5.5251
+FashionMNIST (28x28)  GWO Weights (Fixed)    0.3350         34.4230         4.5180
+
+FashionMNIST (28x28)  PSO   NAS (Evolved)    0.0825         47.7354         4.0159
+FashionMNIST (28x28)  PSO Weights (Fixed)    0.0475         54.5541         4.9982
+
+FashionMNIST (28x28)  SMO   NAS (Evolved)    0.1025         83.0668         5.0015
+FashionMNIST (28x28)  SMO Weights (Fixed)    0.1450         81.2067         6.0298
+
+FashionMNIST (28x28)  WOA   NAS (Evolved)    0.1850         28.9955         5.0030
+FashionMNIST (28x28)  WOA Weights (Fixed)    0.0775         26.7720         6.5250
+
+====================================================================================================
+```
