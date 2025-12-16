@@ -27,9 +27,20 @@ if __name__ == "__main__":
     y_tensor = torch.tensor(y, dtype=torch.float32)
     
 
-    neuro_opt = NeuroOptimizer(X, y, task="classification")
-    model = neuro_opt.search_model(optimizer_name_weights='GWO', epochs=20,  train_time=10*60, epochs_weights=20, population_weights=20)
     """
+    model = neuro_opt.search_linear_model(optimizer_name_weights='GWO', epochs=20,  train_time=10*60, epochs_weights=20, population_weights=20)
+
+    """
+    activation=nn.ReLU
+    Layers = [
+        LinearCfg(2,32,activation),
+        LinearCfg(32,32,activation),
+        LinearCfg(32,32,activation),
+        LinearCfg(32,32,activation),
+        LinearCfg(32, 2, None)
+    ]
+
+    
     Res={}
     neuro_opt = NeuroOptimizer(X, y, task="classification")
     for opt in NeuroOptimizer.get_available_optimizers():
@@ -37,20 +48,21 @@ if __name__ == "__main__":
         
     
         #model = neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=50)
-    
-        model=neuro_opt.search_model(optimizer_name_weights='Adam', epochs=200,  train_time=10*60,
-                                     epochs_weights=30, population_weights=50,
+        start=time.time()
+        model=neuro_opt.search_linear_model(optimizer_name_weights=opt, epochs=20,  train_time=10*60,
+                                     epochs_weights=30, population_weights=20,
                                      time_importance=time_importance)
-    
+        train_time=time.time()-start
         with torch.no_grad():
             start=time.time()
             logits = model(X_tensor)
             inf_time=time.time()-start
             _, predictions = torch.max(logits, 1)
             test_loss = accuracy_score(predictions, y_tensor)
-            Res[opt]=(test_loss,inf_time)
+            Res[opt]=(test_loss,inf_time,train_time)
+            print((opt,test_loss,inf_time,train_time))
     print(Res)
-    """
+    
     with torch.no_grad():
         logits = model(X_tensor)
         _, predictions = torch.max(logits, 1)

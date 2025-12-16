@@ -48,7 +48,7 @@ Breast Cancer       HHO         94.74            1.33        0.0801        0.53 
 
 ```md
 
-model = neuro_opt.search_model(optimizer_name_weights=algo_choice, epochs=30)
+model = neuro_opt.search_linear_model(optimizer_name_weights=algo_choice, epochs=30)
 ====================================================================================================
 Benchmarks
 ====================================================================================================
@@ -90,14 +90,14 @@ Breast Cancer       HHO         96.49            7.70        0.0700        0.53 
 ```python
 X, y = make_moons(n_samples=2000, noise=0.3)
 neuro_opt = NeuroOptimizer(X, y, task="classification")
-
-model = neuro_opt.search_model(
-    optimizer_name_weights=opt, 
-    epochs=5,                   
-    train_time=60,             
-    epochs_weights=10,          
-    population_weights=20,              
-)
+for opt in NeuroOptimizer.get_available_optimizers():
+    model = neuro_opt.search_linear_model(
+        optimizer_name_weights=opt, 
+        epochs=5,                   
+        train_time=60,             
+        epochs_weights=10,          
+        population_weights=20,              
+    )
 ```
 ```md
 ====================================================================================================
@@ -116,7 +116,7 @@ Adam            |   83.88%        | ±1.87%   |     0.3001 ms        |  88.05%
 ====================================================================================================
 ```
 ```python
-model = neuro_opt.search_model(
+model = neuro_opt.search_linear_model(
     optimizer_name_weights=opt, 
     epochs=10,                   
     train_time=60,             
@@ -145,9 +145,10 @@ Adam            |   84.99%        | ±1.00%   |     0.6017 ms        |  87.05%
 
 ```python
 neuro_opt = NeuroOptimizer(X, y, task="classification")
-model=neuro_opt.search_model(optimizer_name_weights='Adam', epochs=20,  train_time=60,
-                                epochs_weights=20, population_weights=20,
-                                time_importance=time_importance)
+for opt in ['Adam','GWD']:
+    model=neuro_opt.search_linear_model(optimizer_name_weights=opt, epochs=20,  train_time=60,
+                                    epochs_weights=20, population_weights=20,
+                                    time_importance=time_importance)
 ```
 ![alt text](image-1.png)
 ![alt text](image-2.png)
@@ -167,7 +168,7 @@ Layers = [
     LinearCfg(32, 1, None)
 ]
 neuro_opt = NeuroOptimizer(x, y, task="regression", Layers=Layers, activation=nn.Tanh)
-model = neuro_opt.search_model(optimizer_name_weights='Adam', epochs=50,  train_time=10*60,
+model = neuro_opt.search_linear_model(optimizer_name_weights='Adam', epochs=50,  train_time=10*60,
                                 epochs_weights=200, population_weights=20,
                                 verbose=True)
 with torch.no_grad():
@@ -175,3 +176,71 @@ with torch.no_grad():
 
 ```
 ![alt text](image.png)
+
+### fetch_california_housing, load_diabetes, make_friedman1
+
+'''md
+=========================================================================================================
+DATASET                   | ALGO       | R² SCORE (Max 1.0)   | MSE             | INF TIME (ms)  
+---------------------------------------------------------------------------------------------------------
+California Housing (2k)   | Adam       | 0.7754               | 0.2052          | 1.0002         
+California Housing (2k)   | GWO        | 0.6756               | 0.2963          | 0.0000         
+California Housing (2k)   | PSO        | -0.0324              | 0.9431          | 0.0000         
+California Housing (2k)   | DE         | 0.5069               | 0.4504          | 0.0000         
+California Housing (2k)   | WOA        | 0.3165               | 0.6244          | 0.0000         
+California Housing (2k)   | GA         | 0.5918               | 0.3729          | 0.0000         
+California Housing (2k)   | ABC        | 0.3652               | 0.5799          | 0.0000         
+California Housing (2k)   | SMO        | 0.6208               | 0.3464          | 0.0000         
+California Housing (2k)   | SMA        | 0.5682               | 0.3944          | 0.0000         
+California Housing (2k)   | HHO        | 0.3607               | 0.5840          | 0.0000         
+Diabetes                  | Adam       | 0.1371               | 4571.8247       | 0.0000         
+Diabetes                  | GWO        | 0.3713               | 3331.1218       | 0.0000         
+Diabetes                  | PSO        | 0.0974               | 4782.2788       | 1.0004         
+Diabetes                  | DE         | 0.2826               | 3800.8921       | 0.0000         
+Diabetes                  | WOA        | -0.1124              | 5893.6045       | 0.0000         
+Diabetes                  | GA         | 0.3249               | 3576.7546       | 0.0000         
+Diabetes                  | ABC        | 0.2084               | 4193.9717       | 1.0002         
+Diabetes                  | SMO        | 0.2716               | 3859.1201       | 0.0000         
+Diabetes                  | SMA        | 0.3340               | 3528.4121       | 0.0000         
+Diabetes                  | HHO        | 0.1961               | 4259.2891       | 1.0011         
+Friedman Non-Linear       | Adam       | 0.6277               | 8.6988          | 0.0000         
+Friedman Non-Linear       | GWO        | 0.6134               | 9.0339          | 0.0000         
+Friedman Non-Linear       | PSO        | 0.0281               | 22.7096         | 0.0000         
+Friedman Non-Linear       | DE         | 0.4986               | 11.7168         | 0.0000         
+Friedman Non-Linear       | WOA        | 0.1627               | 19.5654         | 0.0000         
+Friedman Non-Linear       | GA         | 0.3862               | 14.3419         | 0.0000         
+Friedman Non-Linear       | ABC        | 0.1274               | 20.3887         | 0.0000         
+Friedman Non-Linear       | SMO        | 0.3631               | 14.8830         | 0.0000         
+Friedman Non-Linear       | SMA        | 0.5366               | 10.8274         | 0.0000         
+Friedman Non-Linear       | HHO        | -0.1552              | 26.9935         | 0.0000         
+=========================================================================================================
+'''
+
+
+## Classification Image
+
+### MNIST
+```python
+Layers = [
+    Conv2dCfg(1, 1, 3),
+    FlattenCfg(),
+    LinearCfg(36, 10, None)
+]
+
+for opt in NeuroOptimizer.get_available_optimizers():
+    neuro_opt = NeuroOptimizer(X, y, task="classification",Layers=Layers)
+    model=neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=40)
+    model=neuro_opt.search_model(epochs=20,optimizer_name_weights=opt, epochs_weights=50, population_weights=40)
+```
+
+Model     search_weights      search_model
+Adam        0.9443              0.9649
+GWO         0.3077              0.4140
+PSO         0.1163              0.1268
+DE          0.3127              0.4023
+WOA         0.1013              0.1903
+GA          0.3823              0.4452
+ABC         0.1747              0.2460
+SMO         0.2332              0.2454
+SMA         0.2532              0.2627
+HHO         0.2721              0.1358

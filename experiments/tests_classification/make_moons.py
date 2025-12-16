@@ -38,7 +38,7 @@ if __name__ == "__main__":
             
             neuro_opt = NeuroOptimizer(X, y, task="classification")
 
-            model = neuro_opt.search_model(
+            model = neuro_opt.search_linear_model(
                 optimizer_name_weights=opt, 
                 epochs=10,                   
                 train_time=60,             

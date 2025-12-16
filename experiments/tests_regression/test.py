@@ -23,7 +23,7 @@ if __name__ == "__main__":
         LinearCfg(32, 1, None)
     ]
     neuro_opt = NeuroOptimizer(x, y, task="regression", Layers=Layers, activation=nn.Tanh)
-    model = neuro_opt.search_model(optimizer_name_weights='Adam', epochs=50,  train_time=10*60,
+    model = neuro_opt.search_linear_model(optimizer_name_weights='Adam', epochs=50,  train_time=10*60,
                                    epochs_weights=200, population_weights=20,
                                    verbose=True)
     """
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     
         #model = neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=50)
     
-        model=neuro_opt.search_model(optimizer_name_weights='Adam', epochs=200,  train_time=10*60,
+        model=neuro_opt.search_linear_model(optimizer_name_weights='Adam', epochs=200,  train_time=10*60,
                                      epochs_weights=30, population_weights=50,
                                      time_importance=time_importance)
     

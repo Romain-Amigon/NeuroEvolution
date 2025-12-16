@@ -1,3 +1,3 @@
-from .optimizer import NeuroOptimizer
+from .optimizer import NeuroOptimizer,DynamicNet
 
-__all__ = ["NeuroOptimizer"]
+__all__ = ["NeuroOptimizer","DynamicNet"]

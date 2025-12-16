@@ -48,21 +48,83 @@ class DynamicNet(nn.Module):
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters())
     
-    def flatten_weights(self):
-        return torch.cat([p.detach().flatten() for p in self.parameters()])
 
-    def load_flattened_weights(self, flat_weights_numpy):
-        flat_weights = torch.as_tensor(flat_weights_numpy, dtype=torch.float32)
+    def flatten_weights(self, to_numpy=True, device=None):
+        params = []
+        for p in self.parameters():
+            params.append(p.detach().cpu().flatten())
+        flat = torch.cat(params)
+        if to_numpy:
+            return flat.numpy()
+        return flat.to(device) if device is not None else flat
+    
+    def load_flattened_weights(self, flat_weights, device=None):
+        # accepte numpy array ou torch tensor
+        if isinstance(flat_weights, np.ndarray):
+            flat = torch.as_tensor(flat_weights, dtype=torch.float32)
+        elif isinstance(flat_weights, torch.Tensor):
+            flat = flat_weights.to(dtype=torch.float32)
+        else:
+            raise TypeError("flat_weights must be numpy array or torch.Tensor")
+    
+        if device is not None:
+            flat = flat.to(device)
+    
         idx = 0
-        with torch.no_grad(): 
+        with torch.no_grad():
             for p in self.parameters():
                 num = p.numel()
-                if idx + num > len(flat_weights):
+                if idx + num > flat.numel():
                     raise ValueError("Weight vector is too short!")
-                
-                block = flat_weights[idx : idx + num]
-                p.data.copy_(block.view_as(p))
+                block = flat[idx: idx + num]
+                p.data.copy_(block.view_as(p).to(p.device))
                 idx += num
+        if idx < flat.numel():
+            # Optionnel : avertir si vecteur trop long
+            print("Warning: flat_weights contained extra values that were ignored.")
+    
+    def evaluate_model(self, X,y,loss_fn=nn.MSELoss(), n_warmup=3, n_runs=20, verbose=False):
+        model = self.net
+        model.eval()
+    
+        use_cuda = torch.cuda.is_available()
+        if use_cuda:
+            X = X.to("cuda")
+            y = y.to("cuda")
+            model = model.to("cuda")
+
+        with torch.no_grad():
+            pred = model(X)
+            loss_value = loss_fn(pred, y).item()
+    
+
+        with torch.no_grad():
+            for _ in range(n_warmup):
+                _ = model(X)
+            if use_cuda:
+                torch.cuda.synchronize()
+
+        times = []
+        with torch.no_grad():
+            for _ in range(n_runs):
+                t0 = time.perf_counter()
+                _ = model(X)
+                if use_cuda:
+                    torch.cuda.synchronize()
+                times.append(time.perf_counter() - t0)
+    
+        inference_time = float(np.median(times))
+    
+        if verbose:
+            print(
+                f"Loss: {loss_value:.6f} | "
+                f"Inference time (median): {inference_time*1000:.3f} ms | "
+                f"Input: {tuple(X.shape)}"
+            )
+    
+        return loss_value, inference_time
+    
+
 
 class NeuroOptimizer:
     """
@@ -72,8 +134,8 @@ class NeuroOptimizer:
     def __init__(self, X, y, Layers=None, task="classification", inference_time=float('inf') , activation=nn.ReLU ):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        self.X_train = torch.tensor(self.X_train, dtype=torch.float32)
-        self.X_test  = torch.tensor(self.X_test, dtype=torch.float32)
+        self.X_train = torch.as_tensor(self.X_train, dtype=torch.float32)
+        self.X_test  = torch.as_tensor(self.X_test, dtype=torch.float32)
         
         self.task = task
         if task == "regression":
@@ -84,20 +146,27 @@ class NeuroOptimizer:
         else: 
             self.classes = len(np.unique(y))
             self.output_dim = self.classes
-            self.y_train = torch.tensor(self.y_train, dtype=torch.long)
-            self.y_test  = torch.tensor(self.y_test, dtype=torch.long)
+            self.y_train = torch.as_tensor(self.y_train, dtype=torch.long)
+            self.y_test  = torch.as_tensor(self.y_test, dtype=torch.long)
             self.criterion = nn.CrossEntropyLoss()
         self.activation=activation
         self.n_features = X.shape[1]
 
         if Layers is None:
-            self.Layers = [
-                LinearCfg(self.n_features, 16, nn.ReLU),
-                LinearCfg(16, self.output_dim, None) 
-            ]
+            if isinstance(self.n_features, int):
+                self.Layers = [
+                    LinearCfg(self.n_features, 16, nn.ReLU),
+                    LinearCfg(16, self.output_dim, None) 
+                ]
+            else:
+                # Si image, on met une base CNN simple
+                self.Layers = [
+                    Conv2dCfg(1, 8, 3, padding=1),
+                    FlattenCfg(),
+                    LinearCfg(1, self.output_dim, None)
+                ]
         else:
             self.Layers = Layers
-            
         self.inference_time=inference_time
 
     @staticmethod
@@ -303,23 +372,53 @@ class NeuroOptimizer:
 
     def _reconnect_layers(self, layers):
         """
-        Fonction utilitaire critique : parcourt la liste des layers
-        et s'assure que in_features de la couche N correspond à out_features de la couche N-1.
+        Reconnecte les couches en calculant dynamiquement les dimensions
+        pour Conv2d (H, W, Channels) et Linear (Features).
         """
-        current_input = self.n_features
+        new_layers = []
         
-        for cfg in layers:
-            if isinstance(cfg, LinearCfg):
-                # On force l'entrée à correspondre à la sortie précédente
-                cfg.in_features = current_input
-                # La sortie de cette couche devient l'entrée de la prochaine
-                current_input = cfg.out_features
-            
-            # (Tu pourras ajouter ici la logique pour Conv2d si besoin)
-            
-        return layers
 
-    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
+        if isinstance(self.n_features, tuple) or isinstance(self.n_features, list):
+            dummy_input = torch.zeros(1, *self.n_features)
+        else:
+            dummy_input = torch.zeros(1, self.n_features)
+
+        current_input_dim = self.n_features
+
+        for i, cfg in enumerate(layers):
+            if isinstance(cfg, Conv2dCfg):
+                cfg.in_channels = dummy_input.shape[1] 
+
+                try:
+                    layer = nn.Conv2d(cfg.in_channels, cfg.out_channels, 
+                                      cfg.kernel_size, cfg.stride, cfg.padding)
+                    dummy_input = layer(dummy_input)
+                    new_layers.append(cfg)
+                except Exception:
+                    pass
+
+            elif isinstance(cfg, LinearCfg):
+                if len(dummy_input.shape) > 2:
+                    flat_cfg = FlattenCfg()
+                    dummy_input = torch.flatten(dummy_input, 1)
+                    new_layers.append(flat_cfg)
+                
+                cfg.in_features = dummy_input.shape[1]
+                
+                layer = nn.Linear(cfg.in_features, cfg.out_features)
+                dummy_input = layer(dummy_input)
+                new_layers.append(cfg)
+
+            elif isinstance(cfg, FlattenCfg):
+                dummy_input = torch.flatten(dummy_input, 1)
+                new_layers.append(cfg)
+            
+            elif isinstance(cfg, DropoutCfg):
+                new_layers.append(cfg)
+
+        return new_layers
+
+    def search_linear_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
                      verbose=False, verbose_weights=False, time_importance=None):
         """
@@ -427,7 +526,152 @@ class NeuroOptimizer:
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
+    
+    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
+                     epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
+                     verbose=False, verbose_weights=False, time_importance=None):
+
+        import random
+        import copy
         
+        START = time.time()
+        if verbose: print(f"\n Démarrage de la recherche d'architecture (NAS)...")
+
+        # Initialisation ( inchangée )
+        start_model = self.search_weights(optimizer_name=optimizer_name_weights, 
+                                        epochs=epochs_weights, 
+                                        population=population_weights,
+                                        verbose=verbose_weights)
         
+        best_score = self.evaluate(start_model , time_importance=time_importance)
+        best_model = start_model
+        best_layers = copy.deepcopy(self.Layers) 
+
+        if verbose: print(f"  -> Score initial : {best_score:.4f}")
         
+        new_layers = copy.deepcopy(self.Layers) 
+        ITER = 0
         
+        while ITER < epochs and (time.time() - START) < train_time and best_score > -accuracy_target:
+            ITER += 1
+            if verbose: print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
+            
+            # Reset des layers
+            if random.random() < 0.6: new_layers = copy.deepcopy(best_layers)
+            else: new_layers = copy.deepcopy(new_layers) # Exploration
+
+            mutation_type = random.choice(["change_neurons", "add_layer", "remove_layer"])
+            
+            # On cherche les indices modifiables
+            modifiable_indices = [i for i, l in enumerate(new_layers[:-1]) 
+                                  if isinstance(l, (LinearCfg, Conv2dCfg))]
+            
+            # Sécurité : Si rien à modifier
+            if not modifiable_indices and mutation_type != "add_layer":
+                continue
+
+            mutated = False
+
+            # --- MUTATION 1 : CHANGER PARAMÈTRES (Neurones / Kernel / Channels) ---
+            if mutation_type == "change_neurons" and modifiable_indices:
+                idx = random.choice(modifiable_indices)
+                layer = new_layers[idx]
+
+                if isinstance(layer, LinearCfg):
+                    noise = random.randint(-16, 16)
+                    new_val = max(4, layer.out_features + noise) # Min 4 neurones
+                    if new_val != layer.out_features:
+                        new_layers[idx].out_features = new_val
+                        if verbose: print(f"  Action: Linear {idx} -> {new_val} neurones")
+                        mutated = True
+                
+                elif isinstance(layer, Conv2dCfg):
+                    # Choix aléatoire : Modifier Kernel OU Modifier Channels
+                    if random.random() < 0.5:
+                        # Mutation Kernel (Taille du filtre)
+                        noise = random.choice([-2, 2]) # Passer de 3->5 ou 5->3
+                        new_k = max(1, layer.kernel_size + noise)
+                        if new_k != layer.kernel_size:
+                            new_layers[idx].kernel_size = new_k
+                            # Important: Ajuster le padding pour éviter de trop réduire l'image
+                            new_layers[idx].padding = new_k // 2 
+                            if verbose: print(f"  Action: Conv {idx} -> Kernel {new_k}x{new_k}")
+                            mutated = True
+                    else:
+                        # Mutation Channels (Profondeur)
+                        noise = random.choice([-8, 8, 16])
+                        new_ch = max(4, layer.out_channels + noise)
+                        if new_ch != layer.out_channels:
+                            new_layers[idx].out_channels = new_ch
+                            if verbose: print(f"  Action: Conv {idx} -> {new_ch} Channels")
+                            mutated = True
+
+            # --- MUTATION 2 : AJOUTER COUCHE ---
+            elif mutation_type == "add_layer":
+                # On choisit où insérer (aléatoire)
+                insert_idx = random.randint(0, len(new_layers) - 1)
+                
+                # On décide si on ajoute un Conv ou un Linear
+                # Astuce: Si on est au début du réseau, plutôt Conv. À la fin, plutôt Linear.
+                
+                # Pour faire simple : on copie une couche existante proche ou on crée par défaut
+                if insert_idx < len(new_layers) and isinstance(new_layers[insert_idx], Conv2dCfg):
+                    # Copie d'un Conv existant
+                    new_layer = copy.copy(new_layers[insert_idx])
+                else:
+                    # Défaut Linear
+                    new_layer = LinearCfg(in_features=1, out_features=32, activation=self.activation)
+                
+                new_layers.insert(insert_idx, new_layer)
+                
+                # Correction de la variable idx -> insert_idx
+                if verbose: print(f"  Action: Ajout couche à l'index {insert_idx}")
+                mutated = True
+
+            # --- MUTATION 3 : SUPPRIMER COUCHE ---
+            elif mutation_type == "remove_layer" and len(modifiable_indices) > 1:
+                idx = random.choice(modifiable_indices)
+                del new_layers[idx]
+                if verbose: print(f"  Action: Suppression de la couche {idx}")
+                mutated = True
+
+            if not mutated:
+                continue
+
+            # CRITIQUE : Reconnexion intelligente
+            new_layers = self._reconnect_layers(new_layers)
+
+            # ... (Le reste : création de temp_optimizer et évaluation est correct) ...
+            # ... (Copier-coller la fin de ton code existant ici) ...
+            
+            # Juste pour être complet sur la fin du bloc try/except:
+            temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
+                                          Layers=new_layers, task=self.task)
+            try:
+                temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
+                                                         epochs=epochs_weights, 
+                                                         population=population_weights)
+                
+                new_score = self.evaluate(temp_model, time_importance=time_importance)
+                if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
+
+                if new_score < best_score:
+                    if verbose: print("  ✅ AMÉLIORATION !")
+                    best_score = new_score
+                    best_model = temp_model
+                    best_layers = new_layers
+                    self.Layers = best_layers
+                else:
+                    if verbose: print("  ❌ Rejeté.")
+            
+            except Exception as e:
+                if verbose: print(f"  ⚠️ Crash architecture : {e}")
+
+        print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
+        return best_model
+    
+    
+
+    
+            
+            
