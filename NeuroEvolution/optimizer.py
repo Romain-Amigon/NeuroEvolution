@@ -720,16 +720,16 @@ class NeuroOptimizer:
                 if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
 
                 if new_score < best_score:
-                    if verbose: print("  ✅ AMÉLIORATION !")
+                    if verbose: print(" AMÉLIORATION !")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
                     self.Layers = best_layers
                 else:
-                    if verbose: print("  ❌ Rejeté.")
+                    if verbose: print(" Rejeté.")
 
             except Exception as e:
-                if verbose: print(f"  ⚠️ Crash architecture : {e}")
+                if verbose: print(f"   Crash architecture : {e}")
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
