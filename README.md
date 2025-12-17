@@ -19,6 +19,12 @@ Wide Algorithm Support: Access to 10+ state-of-the-art metaheuristics via Mealpy
 
 ---
 
+Supported Algorithms
+
+NeuroOpt wraps powerful metaheuristics provided by Mealpy.CodeAlgorithm NameBest Use CaseAdamAdaptive Moment EstimationBaseline. Large networks, images, high-dim data.GWOGrey Wolf OptimizerBalanced exploration/exploitation. General purpose.PSOParticle Swarm OptimizationFast convergence on simple landscapes.DEDifferential EvolutionRobust for noisy functions and regression.GAGenetic AlgorithmClassic evolutionary approach. Very robust.WOAWhale Optimization AlgorithmEscaping local minima via spiral search.SMASlime Mould AlgorithmHigh precision, adaptive weights.ABCArtificial Bee ColonyStrong local search (fine-tuning).
+
+---
+
 ## Benchmark : Classification 
 ### Iris, Wine & Breast Cancer
 
@@ -248,7 +254,7 @@ for opt in NeuroOptimizer.get_available_optimizers():
     model=neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=40)
     model=neuro_opt.search_model(epochs=20,optimizer_name_weights=opt, epochs_weights=50, population_weights=40)
 ```
-
+```md
 Model     search_weights      search_model
 Adam        0.9443              0.9649
 GWO         0.3077              0.4140
@@ -260,10 +266,10 @@ ABC         0.1747              0.2460
 SMO         0.2332              0.2454
 SMA         0.2532              0.2627
 HHO         0.2721              0.1358
-
+```
 ``` md
 ====================================================================================================
-📊 RÉSULTATS DU BENCHMARK
+BENCHMARK
 ====================================================================================================
              Dataset Algo            Mode  Accuracy  Train Time (s)  Inf Time (ms)
         Digits (8x8)  ABC   NAS (Evolved)    0.1111          7.1849         1.0071
@@ -319,6 +325,84 @@ FashionMNIST (28x28)  SMO Weights (Fixed)    0.1450         81.2067         6.02
 
 FashionMNIST (28x28)  WOA   NAS (Evolved)    0.1850         28.9955         5.0030
 FashionMNIST (28x28)  WOA Weights (Fixed)    0.0775         26.7720         6.5250
+
+====================================================================================================
+```
+
+```python
+LAYERS = [
+    Conv2dCfg(1, 8, 3, padding=1),
+    Conv2dCfg(8, 8, 3, padding=1),
+    Conv2dCfg(8, 8, 3, padding=1),
+    FlattenCfg(),
+    LinearCfg(X.shape[2]*X.shape[3]*X.shape[1]*8, 10, None) 
+]
+```
+
+```md
+====================================================================================================
+ BENCHMARK
+====================================================================================================
+             Dataset Algo            Mode  Accuracy  Train Time (s)  Inf Time (ms)
+        Digits (8x8)  ABC   NAS (Evolved)    0.1139          1.8717         3.9964
+        Digits (8x8)  ABC Weights (Fixed)    0.1250          1.6242         2.0325
+
+        Digits (8x8) Adam   NAS (Evolved)    0.9833          0.9938        23.0863
+        Digits (8x8) Adam Weights (Fixed)    0.9722          0.9804         4.0231
+
+        Digits (8x8)   DE   NAS (Evolved)    0.1556          2.0961         2.0087
+        Digits (8x8)   DE Weights (Fixed)    0.1111          0.9968         1.0011
+
+        Digits (8x8)   GA   NAS (Evolved)    0.1111          1.3131         1.0011
+        Digits (8x8)   GA Weights (Fixed)    0.0250          2.4344         4.0030
+
+        Digits (8x8)  GWO   NAS (Evolved)    0.0639          0.8758         1.9996
+        Digits (8x8)  GWO Weights (Fixed)    0.1806          1.2347         1.5016
+
+        Digits (8x8)  HHO   NAS (Evolved)    0.1333          1.5475         3.0150
+        Digits (8x8)  HHO Weights (Fixed)    0.0917          2.4058         2.1415
+
+        Digits (8x8)  PSO   NAS (Evolved)    0.1417          2.6542         2.0010
+        Digits (8x8)  PSO Weights (Fixed)    0.1333          1.7392         2.0003
+
+        Digits (8x8)  SMA   NAS (Evolved)    0.0778        154.5960         1.5140
+        Digits (8x8)  SMA Weights (Fixed)    0.0917         18.4968         0.9997
+
+        Digits (8x8)  SMO   NAS (Evolved)    0.0861          1.9286         1.5068
+        Digits (8x8)  SMO Weights (Fixed)    0.1278          2.8755         0.9689
+
+        Digits (8x8)  WOA   NAS (Evolved)    0.0556          1.0074         3.0093
+        Digits (8x8)  WOA Weights (Fixed)    0.0306          1.1385         2.5125
+
+FashionMNIST (28x28)  ABC   NAS (Evolved)    0.1200          2.0240        16.5219
+FashionMNIST (28x28)  ABC Weights (Fixed)    0.0925          2.5769        22.5620
+
+FashionMNIST (28x28) Adam   NAS (Evolved)    0.8400          7.9745        23.0608
+FashionMNIST (28x28) Adam Weights (Fixed)    0.8450          8.7450        34.7574
+
+FashionMNIST (28x28)   DE   NAS (Evolved)    0.0750          1.3014        27.2593
+FashionMNIST (28x28)   DE Weights (Fixed)    0.0950         10.5563        24.0796
+
+FashionMNIST (28x28)   GA   NAS (Evolved)    0.1000          1.2839        21.5788
+FashionMNIST (28x28)   GA Weights (Fixed)    0.1350          1.9806        21.0924
+
+FashionMNIST (28x28)  GWO   NAS (Evolved)    0.1175          1.1394        17.0500
+FashionMNIST (28x28)  GWO Weights (Fixed)    0.1350          1.4528        41.0292
+
+FashionMNIST (28x28)  HHO   NAS (Evolved)    0.0825          1.6817        17.5858
+FashionMNIST (28x28)  HHO Weights (Fixed)    0.0975          1.7816        21.0438
+
+FashionMNIST (28x28)  PSO   NAS (Evolved)    0.1200          1.8998        16.5281
+FashionMNIST (28x28)  PSO Weights (Fixed)    0.0700          1.7432        20.5402
+
+FashionMNIST (28x28)  SMA   NAS (Evolved)    0.1150         22.3150        28.6043
+FashionMNIST (28x28)  SMA Weights (Fixed)    0.0700          3.2801        21.5473
+
+FashionMNIST (28x28)  SMO   NAS (Evolved)    0.1575         39.5106        18.0459
+FashionMNIST (28x28)  SMO Weights (Fixed)    0.1025          2.7280        20.4964
+
+FashionMNIST (28x28)  WOA   NAS (Evolved)    0.0700          1.8454        30.6456
+FashionMNIST (28x28)  WOA Weights (Fixed)    0.0925          1.5019        36.1836
 
 ====================================================================================================
 ```

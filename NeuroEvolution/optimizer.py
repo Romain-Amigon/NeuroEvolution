@@ -44,10 +44,10 @@ class DynamicNet(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-    
+
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters())
-    
+
 
     def flatten_weights(self, to_numpy=True, device=None):
         params = []
@@ -57,7 +57,7 @@ class DynamicNet(nn.Module):
         if to_numpy:
             return flat.numpy()
         return flat.to(device) if device is not None else flat
-    
+
     def load_flattened_weights(self, flat_weights, device=None):
         # accepte numpy array ou torch tensor
         if isinstance(flat_weights, np.ndarray):
@@ -66,10 +66,10 @@ class DynamicNet(nn.Module):
             flat = flat_weights.to(dtype=torch.float32)
         else:
             raise TypeError("flat_weights must be numpy array or torch.Tensor")
-    
+
         if device is not None:
             flat = flat.to(device)
-    
+
         idx = 0
         with torch.no_grad():
             for p in self.parameters():
@@ -82,11 +82,11 @@ class DynamicNet(nn.Module):
         if idx < flat.numel():
             # Optionnel : avertir si vecteur trop long
             print("Warning: flat_weights contained extra values that were ignored.")
-    
+
     def evaluate_model(self, X,y,loss_fn=nn.MSELoss(), n_warmup=3, n_runs=20, verbose=False):
         model = self.net
         model.eval()
-    
+
         use_cuda = torch.cuda.is_available()
         if use_cuda:
             X = X.to("cuda")
@@ -96,7 +96,7 @@ class DynamicNet(nn.Module):
         with torch.no_grad():
             pred = model(X)
             loss_value = loss_fn(pred, y).item()
-    
+
 
         with torch.no_grad():
             for _ in range(n_warmup):
@@ -112,38 +112,38 @@ class DynamicNet(nn.Module):
                 if use_cuda:
                     torch.cuda.synchronize()
                 times.append(time.perf_counter() - t0)
-    
+
         inference_time = float(np.median(times))
-    
+
         if verbose:
             print(
                 f"Loss: {loss_value:.6f} | "
                 f"Inference time (median): {inference_time*1000:.3f} ms | "
                 f"Input: {tuple(X.shape)}"
             )
-    
-        return loss_value, inference_time
-    
-    def get_layer_ranges(self):
-        """
-        Retourne une liste de tuples (start_idx, end_idx) pour chaque couche 
-        qui possède des paramètres (Linear, Conv2d).
-        """
-        ranges = []
-        current_idx = 0
-        
 
-        for layer in self.net:
-            nb_params = sum(p.numel() for p in layer.parameters())
-            
-            if nb_params > 0:
-                ranges.append((current_idx, current_idx + nb_params))
-                current_idx += nb_params
-            else:
-                ranges.append(None)
-                
-        return ranges
-    
+        return loss_value, inference_time
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class NeuroOptimizer:
@@ -153,10 +153,10 @@ class NeuroOptimizer:
     """
     def __init__(self, X, y, Layers=None, task="classification", inference_time=float('inf') , activation=nn.ReLU ):
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
+
         self.X_train = torch.as_tensor(self.X_train, dtype=torch.float32)
         self.X_test  = torch.as_tensor(self.X_test, dtype=torch.float32)
-        
+
         self.task = task
         if task == "regression":
             self.output_dim = 1
@@ -243,7 +243,7 @@ class NeuroOptimizer:
                 - Default for Classification: :math:`-Accuracy + (Time \\times 10)`
                 - Default for Regression: :math:`MSE + (Time \\times 10)`
         """
-            
+
         # warmup
         if self.X_test.is_cuda:
             torch.cuda.synchronize() 
@@ -251,16 +251,16 @@ class NeuroOptimizer:
         start = time.time()
         with torch.no_grad():
             outputs = model(self.X_test)
-        
+
         if self.X_test.is_cuda:
             torch.cuda.synchronize()
-            
+
         inference_time = time.time() - start
 
         if self.task == "classification":
             _, predicted = torch.max(outputs.data, 1)
             acc = float(accuracy_score(self.y_test.cpu(), predicted.cpu()))
-            
+
             if verbose:
                 print(f"   [Eval] Acc: {acc*100:.2f}% | Time: {inference_time*1000:.4f}ms")
 
@@ -271,13 +271,13 @@ class NeuroOptimizer:
 
         else: # Regression
             mse_loss = self.criterion(outputs, self.y_test).item()
-            
+
             if verbose:
                 print(f"   [Eval] MSE: {mse_loss:.4f} | Time: {inference_time*1000:.4f}ms")
 
             if time_importance:
                 return time_importance(mse_loss, inference_time)
-            
+
             return mse_loss 
 
     @staticmethod
@@ -306,12 +306,13 @@ class NeuroOptimizer:
         Args:
             learning_rate (float): Only used if optimizer_name is 'Adam'.
         """
-        
+
+        # --- CAS SPÉCIAL : ADAM (Gradient Descent) ---
         if optimizer_name == "Adam":
             if verbose :print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
             model = DynamicNet(layers_cfg=self.Layers)
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-            
+
             model.train() # Mode entraînement pour Adam
             for epoch in range(epochs):
                 optimizer.zero_grad()
@@ -319,60 +320,62 @@ class NeuroOptimizer:
                 loss = self.criterion(y_pred, self.y_train)
                 loss.backward()
                 optimizer.step()
-                
+
+                # Optional: print log occasionally
                 # if epoch % 10 == 0: print(f"Epoch {epoch}: Loss {loss.item():.4f}")
-            
+
             if verbose :print(f"Finished! Final Train Loss: {loss.item():.4f}")
             return model # On retourne directement le modèle entraîné
 
+        # --- CAS GÉNÉRAL : MÉTAHEURISTIQUES (Mealpy) ---
         dummy_model = DynamicNet(layers_cfg=self.Layers)
         n_params = dummy_model.count_parameters()
-        
-        current_weights = dummy_model.flatten_weights(to_numpy=True)
 
-        active_indices = []
-        is_partial_opt = False
+        if verbose :print(f"Architecture defined. Number of weights to optimize: {n_params}")
+
+
+
 
         if n_params > 5000:
-            if verbose: 
-                print(f"⚠️ Large Model ({n_params} params). Switching to Layer-wise Optimization.")
-            
-            is_partial_opt = True
-            
-            ranges = dummy_model.get_layer_ranges()
-            valid_layers_indices = [i for i, r in enumerate(ranges) if r is not None]
-
-            n_layers_to_optim = max(1, int(len(valid_layers_indices) * 0.3)) 
-            chosen_layers = rd.sample(valid_layers_indices, n_layers_to_optim)
-            
-            if verbose: print(f"Selected layers indices for optimization: {chosen_layers}")
+            print("WARNING: Above 5000 parameters, swarm algorithms converge very poorly.")
 
 
-            active_indices_list = []
-            for l_idx in chosen_layers:
-                start, end = ranges[l_idx]
-                active_indices_list.extend(range(start, end))
-            
-            active_indices = np.array(active_indices_list)
-            
-            initial_active_weights = current_weights[active_indices]
-            
-            n_active_params = len(active_indices)
-            lb = [-1.0] * n_active_params
-            ub = [ 1.0] * n_active_params
-            
-            if verbose: print(f"Optimizing {n_active_params} parameters (subset) instead of {n_params}.")
-            
 
-            def objective_func(solution):
-                return self._partial_fitness_wrapper(solution, current_weights, active_indices)
 
-        else:
-            # Cas normal (< 5000 params) : on optimise tout
-            lb = [-1.0] * n_params
-            ub = [ 1.0] * n_params
-            objective_func = self.fitness_function
-        
+
+
+
+        lb = [-1.0] * n_params
+        ub = [ 1.0] * n_params
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         problem = {
             "obj_func": self.fitness_function,
             "bounds": FloatVar(lb=lb, ub=ub),
@@ -381,9 +384,9 @@ class NeuroOptimizer:
             "log_to": None,           
             "save_population": False,
         }
-        
+
         term_dict = {
-           "max_early_stop": 30
+           "max_early_stop": 15  # after 30 epochs, if the global best doesn't improve then we stop the program
         }
 
         if optimizer_name == "GWO":
@@ -410,23 +413,23 @@ class NeuroOptimizer:
 
         if verbose :print(f"Starting Neuro-evolution ({optimizer_name})...")
         best_agent = model_opt.solve(problem, termination=term_dict)
-        
+
         best_position = best_agent.solution
         best_fitness = best_agent.target.fitness
-        
-        if is_partial_opt:
-            final_weights = current_weights.copy()
-            np.put(final_weights, active_indices, best_position)
-        else:
-            final_weights = best_position
-        
+
+
+
+
+
+
+
         if verbose :print(f"Finished! Best Train Loss: {best_fitness:.4f}")
-        
+
         # On charge les meilleurs poids dans le modèle
-        dummy_model.load_flattened_weights(final_weights)
+        dummy_model.load_flattened_weights(best_position)
         return dummy_model
-    
-    
+
+
 
 
 
@@ -437,7 +440,7 @@ class NeuroOptimizer:
         pour Conv2d (H, W, Channels) et Linear (Features).
         """
         new_layers = []
-        
+
 
         if isinstance(self.n_features, tuple) or isinstance(self.n_features, list):
             dummy_input = torch.zeros(1, *self.n_features)
@@ -463,9 +466,9 @@ class NeuroOptimizer:
                     flat_cfg = FlattenCfg()
                     dummy_input = torch.flatten(dummy_input, 1)
                     new_layers.append(flat_cfg)
-                
+
                 cfg.in_features = dummy_input.shape[1]
-                
+
                 layer = nn.Linear(cfg.in_features, cfg.out_features)
                 dummy_input = layer(dummy_input)
                 new_layers.append(cfg)
@@ -473,7 +476,7 @@ class NeuroOptimizer:
             elif isinstance(cfg, FlattenCfg):
                 dummy_input = torch.flatten(dummy_input, 1)
                 new_layers.append(cfg)
-            
+
             elif isinstance(cfg, DropoutCfg):
                 new_layers.append(cfg)
 
@@ -488,7 +491,7 @@ class NeuroOptimizer:
         """
         import random
         import copy
-        
+
         START = time.time()
         if verbose :print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
@@ -498,7 +501,7 @@ class NeuroOptimizer:
                                         epochs=epochs_weights, 
                                         population=population_weights,
                                         verbose=verbose_weights)
-        
+
         best_score = self.evaluate(start_model , time_importance=time_importance)
         best_model = start_model
         best_layers = copy.deepcopy(self.Layers) 
@@ -509,17 +512,17 @@ class NeuroOptimizer:
         while ITER < epochs and (time.time() - START) < train_time and best_score>-accuracy_target:
             ITER += 1
             if verbose :print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
-            
-           
+
+
             if rd.random()<0.6: new_layers = copy.deepcopy(best_layers)
             elif rd.random()<0.5: new_layers = copy.deepcopy(new_layers)
             else: new_layers = copy.deepcopy(self.Layers)
-            
-        
+
+
             mutation_type = random.choice(["change_neurons", "add_layer", "remove_layer"])
-            
+
             linear_indices = [i for i, l in enumerate(new_layers[:-1]) if isinstance(l, LinearCfg)]
-            
+
             mutated = False
 
 
@@ -527,7 +530,7 @@ class NeuroOptimizer:
                 idx = random.choice(linear_indices)
                 noise = random.randint(-16, 16)
                 new_val = new_layers[idx].out_features + noise
-               
+
                 if new_val > 4:
                     new_layers[idx].out_features = new_val
                     if verbose :print(f"  Action: Modification couche {idx} -> {new_val} neurones")
@@ -538,14 +541,14 @@ class NeuroOptimizer:
 
                 insert_idx = random.randint(0, len(new_layers) - 1)
                 new_neurons = random.randint(16, 64)
-               
+
                 new_layer = LinearCfg(in_features=1, out_features=new_neurons, activation=self.activation)
                 new_layers.insert(insert_idx, new_layer)
                 if verbose :print(f"  Action: Ajout d'une couche de {new_neurons} neurones à l'index {insert_idx}")
                 mutated = True
 
             elif mutation_type == "remove_layer" and len(linear_indices) > 1:
-                
+
                 idx = random.choice(linear_indices)
                 del new_layers[idx]
                 if verbose :print(f"  Action: Suppression de la couche {idx}")
@@ -561,13 +564,13 @@ class NeuroOptimizer:
 
             temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
                                           Layers=new_layers, task=self.task)
-            
+
 
             try:
                 temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
                                                          epochs=epochs_weights, 
                                                          population=population_weights)
-                
+
                 # Évaluation
                 new_score = self.evaluate(temp_model, time_importance=time_importance)
                 if verbose :print(f"  -> Nouveau Score : {new_score:.4f} (Meilleur : {best_score:.4f})")
@@ -577,24 +580,24 @@ class NeuroOptimizer:
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
-                    
+
                     self.Layers = best_layers
                 else:
                     if verbose :print("Rejeté.")
-            
+
             except Exception as e:
                 if verbose :print(f" Crash architecture invalide : {e}")
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
-    
+
     def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
                      verbose=False, verbose_weights=False, time_importance=None):
 
         import random
         import copy
-        
+
         START = time.time()
         if verbose: print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
@@ -603,30 +606,30 @@ class NeuroOptimizer:
                                         epochs=epochs_weights, 
                                         population=population_weights,
                                         verbose=verbose_weights)
-        
+
         best_score = self.evaluate(start_model , time_importance=time_importance)
         best_model = start_model
         best_layers = copy.deepcopy(self.Layers) 
 
         if verbose: print(f"  -> Score initial : {best_score:.4f}")
-        
+
         new_layers = copy.deepcopy(self.Layers) 
         ITER = 0
-        
+
         while ITER < epochs and (time.time() - START) < train_time and best_score > -accuracy_target:
             ITER += 1
             if verbose: print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
-            
+
             # Reset des layers
             if random.random() < 0.6: new_layers = copy.deepcopy(best_layers)
             else: new_layers = copy.deepcopy(new_layers) # Exploration
 
             mutation_type = random.choice(["change_neurons", "add_layer", "remove_layer"])
-            
+
             # On cherche les indices modifiables
             modifiable_indices = [i for i, l in enumerate(new_layers[:-1]) 
                                   if isinstance(l, (LinearCfg, Conv2dCfg))]
-            
+
             # Sécurité : Si rien à modifier
             if not modifiable_indices and mutation_type != "add_layer":
                 continue
@@ -645,7 +648,7 @@ class NeuroOptimizer:
                         new_layers[idx].out_features = new_val
                         if verbose: print(f"  Action: Linear {idx} -> {new_val} neurones")
                         mutated = True
-                
+
                 elif isinstance(layer, Conv2dCfg):
                     # Choix aléatoire : Modifier Kernel OU Modifier Channels
                     if random.random() < 0.5:
@@ -671,10 +674,10 @@ class NeuroOptimizer:
             elif mutation_type == "add_layer":
                 # On choisit où insérer (aléatoire)
                 insert_idx = random.randint(0, len(new_layers) - 1)
-                
+
                 # On décide si on ajoute un Conv ou un Linear
                 # Astuce: Si on est au début du réseau, plutôt Conv. À la fin, plutôt Linear.
-                
+
                 # Pour faire simple : on copie une couche existante proche ou on crée par défaut
                 if insert_idx < len(new_layers) and isinstance(new_layers[insert_idx], Conv2dCfg):
                     # Copie d'un Conv existant
@@ -682,9 +685,9 @@ class NeuroOptimizer:
                 else:
                     # Défaut Linear
                     new_layer = LinearCfg(in_features=1, out_features=32, activation=self.activation)
-                
+
                 new_layers.insert(insert_idx, new_layer)
-                
+
                 # Correction de la variable idx -> insert_idx
                 if verbose: print(f"  Action: Ajout couche à l'index {insert_idx}")
                 mutated = True
@@ -704,7 +707,7 @@ class NeuroOptimizer:
 
             # ... (Le reste : création de temp_optimizer et évaluation est correct) ...
             # ... (Copier-coller la fin de ton code existant ici) ...
-            
+
             # Juste pour être complet sur la fin du bloc try/except:
             temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
                                           Layers=new_layers, task=self.task)
@@ -712,42 +715,39 @@ class NeuroOptimizer:
                 temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
                                                          epochs=epochs_weights, 
                                                          population=population_weights)
-                
+
                 new_score = self.evaluate(temp_model, time_importance=time_importance)
                 if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
 
                 if new_score < best_score:
-                    if verbose: print("  AMÉLIORATION !")
+                    if verbose: print("  ✅ AMÉLIORATION !")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
                     self.Layers = best_layers
                 else:
-                    if verbose: print("  Rejeté.")
-            
+                    if verbose: print("  ❌ Rejeté.")
+
             except Exception as e:
-                if verbose: print(f"  Crash architecture : {e}")
+                if verbose: print(f"  ⚠️ Crash architecture : {e}")
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
-    
-    
-    def _partial_fitness_wrapper(self, active_solution, base_weights, active_indices):
-        """
-        Reconstruit le vecteur complet à partir de la solution partielle (active)
-        et des poids figés (base), puis calcule la loss.
-        """
-        # 1. Copie des poids de base (figés)
-        full_weights = base_weights.copy()
-        
-        # 2. Injection des nouveaux poids optimisés aux bons endroits
-        # active_solution est un vecteur plat, active_indices sont les positions dans le vecteur global
-        np.put(full_weights, active_indices, active_solution)
 
-        return self.fitness_function(full_weights)
-    
-    
 
-    
-            
-            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -29,28 +29,26 @@ if __name__ == "__main__":
 
     """
     model = neuro_opt.search_linear_model(optimizer_name_weights='GWO', epochs=20,  train_time=10*60, epochs_weights=20, population_weights=20)
-
     """
-    activation=nn.ReLU
+    
+    activation=nn.Tanh
     Layers = [
         LinearCfg(2,32,activation),
-        LinearCfg(32,32,activation),
-        LinearCfg(32,32,activation),
         LinearCfg(32,32,activation),
         LinearCfg(32, 2, None)
     ]
 
     
     Res={}
-    neuro_opt = NeuroOptimizer(X, y, task="classification")
+    neuro_opt = NeuroOptimizer(X, y, task="classification",Layers=Layers)
     for opt in NeuroOptimizer.get_available_optimizers():
         
         
     
         #model = neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=50)
         start=time.time()
-        model=neuro_opt.search_linear_model(optimizer_name_weights=opt, epochs=20,  train_time=10*60,
-                                     epochs_weights=30, population_weights=20,
+        model=neuro_opt.search_linear_model(optimizer_name_weights=opt, epochs=10,  train_time=60,
+                                     epochs_weights=10, population_weights=20,
                                      time_importance=time_importance)
         train_time=time.time()-start
         with torch.no_grad():

@@ -82,6 +82,8 @@ for data_name, X, y in DATASETS:
     print(f" Dataset: {data_name} | Shape: {X.shape}")
     LAYERS = [
         Conv2dCfg(1, 8, 3, padding=1),
+        Conv2dCfg(8, 8, 3, padding=1),
+        Conv2dCfg(8, 8, 3, padding=1),
         FlattenCfg(),
         LinearCfg(X.shape[2]*X.shape[3]*X.shape[1]*8, 10, None) 
     ]
