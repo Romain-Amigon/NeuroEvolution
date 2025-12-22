@@ -15,7 +15,7 @@ from mealpy.bio_based import SMA
 from mealpy.evolutionary_based import GA, DE
 from mealpy.physics_based import SA
 
-from .layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg
+from .layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg,MaxPool2dCfg
 
 class DynamicNet(nn.Module):
     """
@@ -39,6 +39,8 @@ class DynamicNet(nn.Module):
                 layers.append(nn.Dropout(p=cfg.p))
             elif isinstance(cfg, FlattenCfg):
                 layers.append(nn.Flatten(start_dim=cfg.start_dim))
+            elif isinstance(cfg, MaxPool2dCfg):
+                layers.append(nn.MaxPool2d(kernel_size=cfg.kernel_size, stride=cfg.stride, padding=cfg.padding,  ceil_mode=cfg.ceil_mode) )
 
         self.net = nn.Sequential(*layers)
 
@@ -353,29 +355,6 @@ class NeuroOptimizer:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         problem = {
             "obj_func": self.fitness_function,
             "bounds": FloatVar(lb=lb, ub=ub),
@@ -478,6 +457,10 @@ class NeuroOptimizer:
                 new_layers.append(cfg)
 
             elif isinstance(cfg, DropoutCfg):
+                new_layers.append(cfg)
+            
+            elif isinstance(cfg, MaxPool2dCfg):
+
                 new_layers.append(cfg)
 
         return new_layers
