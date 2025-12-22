@@ -32,3 +32,11 @@ class DropoutCfg:
 @dataclass
 class FlattenCfg:
     start_dim: int = 1
+
+@dataclass
+class MaxPool2dCfg:
+    kernel_size: int | tuple
+    stride: int | tuple | None = None  
+    padding: int = 0
+    dilation: int = 1
+    ceil_mode: bool = False

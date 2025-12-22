@@ -10,9 +10,10 @@ Created on Wed Dec 17 02:07:12 2025
 Benchmark Statistique : Adam (20 runs)
 Mesure: Moyenne et Écart-type sur Accuracy et Temps
 """
+import torch.nn as nn
 
 import time
-import torch
+import torch 
 import numpy as np
 import pandas as pd
 from sklearn.datasets import load_digits
@@ -20,14 +21,14 @@ from torchvision import datasets, transforms
 
 # Assurez-vous que ces imports fonctionnent avec votre structure de dossier
 from NeuroEvolution import NeuroOptimizer 
-from NeuroEvolution.layer_classes import Conv2dCfg, FlattenCfg, LinearCfg
+from NeuroEvolution.layer_classes import Conv2dCfg, FlattenCfg, LinearCfg,MaxPool2dCfg, DropoutCfg
 
 # --- CONFIGURATION ---
 N_RUNS = 20          # Nombre d'itérations pour les statistiques
 OPTIMIZER = "Adam"   # On ne teste que Adam
-EPOCHS = 30          # Nombre d'époques par entraînement
-POPULATION = 30      # (Non utilisé par Adam, mais requis par la signature)
-
+EPOCHS = 70          # Nombre d'époques par entraînement
+POPULATION = 30      
+EPOCHS_MODEL=20
 def get_data_digits():
     digits = load_digits()
     X = torch.tensor(digits.images, dtype=torch.float32).unsqueeze(1) # (N, 1, 8, 8)
@@ -84,13 +85,32 @@ print(f"{'='*100}\n")
 for data_name, X, y in DATASETS:
     print(f" Dataset: {data_name} | Shape: {X.shape}")
     
-    # Architecture Fixe pour le test statistique
-    LAYERS = [
-        Conv2dCfg(1, 32, 3, padding=1),
-        Conv2dCfg(32, 32, 3, padding=1),
-        Conv2dCfg(32, 32, 3, padding=1),
+ 
+    LAYERS= [
+        # --- BLOC 1 : Extraction de caractéristiques primaires (Bords, Lignes) ---
+        # Entrée : 28x28x1
+        Conv2dCfg(in_channels=1, out_channels=32, kernel_size=3, padding=1),
+        # Réduction : 28x28 -> 14x14
+        MaxPool2dCfg(kernel_size=2, stride=2),
+        
+        # --- BLOC 2 : Extraction de formes complexes (Boucles, Coins) ---
+        # Entrée : 14x14x32 -> Sortie : 14x14x64 (On augmente la profondeur quand l'image rétrécit)
+        Conv2dCfg(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+        # Réduction : 14x14 -> 7x7
+        MaxPool2dCfg(kernel_size=2, stride=2),
+    
+        # --- CLASSIFICATION ---
         FlattenCfg(),
-        LinearCfg(X.shape[2]*X.shape[3]*X.shape[1]*32, 10, None) 
+        
+        # Couche dense intermédiaire (Le "cerveau" qui interprète les formes)
+        # Calcul auto : 7 * 7 * 64 = 3136 entrées
+        LinearCfg(in_features=(X.shape[2] // 4) * (X.shape[3] // 4) * 64, out_features=256,activation=nn.ReLU),
+        
+        # Dropout pour éviter que le NAS ne crée un modèle qui apprend par cœur
+        DropoutCfg(p=0.25),
+        
+        # Sortie finale (10 classes pour FashionMNIST)
+        LinearCfg(in_features=256, out_features=10, activation=None) 
     ]
 
     # Listes pour stocker les résultats de chaque run
@@ -109,16 +129,19 @@ for data_name, X, y in DATASETS:
         start_train = time.time()
         
         # Entraînement des poids (Mode Fixe)
-        model_fixed = neuro.search_weights(
-            optimizer_name=OPTIMIZER, 
-            epochs=EPOCHS,          
-            population=POPULATION,    
-            verbose=False
-        )
+        #model_fixed = neuro.search_weights(
+        #    optimizer_name=OPTIMIZER, 
+        #    epochs=EPOCHS,          
+        #    population=POPULATION,    
+        #    verbose=False
+        #)
+        
+        model=neuro.search_model( epochs=EPOCHS_MODEL, train_time=EPOCHS_MODEL*60, optimizer_name_weights='Adam', 
+                         epochs_weights=EPOCHS,
+                         verbose=False, verbose_weights=False, time_importance=None)
         
         train_time = time.time() - start_train
-        acc, inf_ms = evaluate_model(model_fixed, neuro.X_test, neuro.y_test)
-
+        acc, inf_ms = evaluate_model(model, neuro.X_test, neuro.y_test)
         # Stockage
         acc_scores.append(acc)
         train_times.append(train_time)
