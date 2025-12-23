@@ -15,7 +15,7 @@ from mealpy.bio_based import SMA
 from mealpy.evolutionary_based import GA, DE
 from mealpy.physics_based import SA
 
-from .layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg,MaxPool2dCfg
+from .layer_classes import Conv2dCfg, DropoutCfg, FlattenCfg, LinearCfg, MaxPool2dCfg, GlobalAvgPoolCfg
 
 class DynamicNet(nn.Module):
     """
@@ -41,7 +41,11 @@ class DynamicNet(nn.Module):
                 layers.append(nn.Flatten(start_dim=cfg.start_dim))
             elif isinstance(cfg, MaxPool2dCfg):
                 layers.append(nn.MaxPool2d(kernel_size=cfg.kernel_size, stride=cfg.stride, padding=cfg.padding,  ceil_mode=cfg.ceil_mode) )
+                
+            elif isinstance(cfg, GlobalAvgPoolCfg):
+                layers.append(nn.AdaptiveAvgPool2d((1, 1)))
 
+                layers.append(nn.Flatten())
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -342,16 +346,8 @@ class NeuroOptimizer:
             print("WARNING: Above 5000 parameters, swarm algorithms converge very poorly.")
 
 
-
-
-
-
-
         lb = [-1.0] * n_params
         ub = [ 1.0] * n_params
-
-
-
 
 
 
@@ -365,7 +361,7 @@ class NeuroOptimizer:
         }
 
         term_dict = {
-           "max_early_stop": 15  # after 30 epochs, if the global best doesn't improve then we stop the program
+           "max_early_stop": 25  # after 30 epochs, if the global best doesn't improve then we stop the program
         }
 
         if optimizer_name == "GWO":
@@ -395,10 +391,6 @@ class NeuroOptimizer:
 
         best_position = best_agent.solution
         best_fitness = best_agent.target.fitness
-
-
-
-
 
 
 
@@ -458,10 +450,23 @@ class NeuroOptimizer:
 
             elif isinstance(cfg, DropoutCfg):
                 new_layers.append(cfg)
-            
+
             elif isinstance(cfg, MaxPool2dCfg):
 
                 new_layers.append(cfg)
+            
+            elif isinstance(cfg, GlobalAvgPoolCfg):
+                if dummy_input.ndim < 4:
+                    continue 
+
+                try:
+                    layer = nn.AdaptiveAvgPool2d((1, 1))
+                    dummy_input = layer(dummy_input)
+                    # Après un GlobalAvgPool, on aplatit toujours
+                    dummy_input = torch.flatten(dummy_input, 1) 
+                    new_layers.append(cfg)
+                except Exception:
+                    pass
 
         return new_layers
 
@@ -584,7 +589,7 @@ class NeuroOptimizer:
         START = time.time()
         if verbose: print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
-        # Initialisation ( inchangée )
+
         start_model = self.search_weights(optimizer_name=optimizer_name_weights, 
                                         epochs=epochs_weights, 
                                         population=population_weights,
@@ -603,7 +608,7 @@ class NeuroOptimizer:
             ITER += 1
             if verbose: print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
 
-            # Reset des layers
+
             if random.random() < 0.6: new_layers = copy.deepcopy(best_layers)
             else: new_layers = copy.deepcopy(new_layers) # Exploration
 
@@ -613,39 +618,35 @@ class NeuroOptimizer:
             modifiable_indices = [i for i, l in enumerate(new_layers[:-1]) 
                                   if isinstance(l, (LinearCfg, Conv2dCfg))]
 
-            # Sécurité : Si rien à modifier
             if not modifiable_indices and mutation_type != "add_layer":
                 continue
 
             mutated = False
 
-            # --- MUTATION 1 : CHANGER PARAMÈTRES (Neurones / Kernel / Channels) ---
             if mutation_type == "change_neurons" and modifiable_indices:
                 idx = random.choice(modifiable_indices)
                 layer = new_layers[idx]
 
                 if isinstance(layer, LinearCfg):
                     noise = random.randint(-16, 16)
-                    new_val = max(4, layer.out_features + noise) # Min 4 neurones
+                    new_val = max(4, layer.out_features + noise)
                     if new_val != layer.out_features:
                         new_layers[idx].out_features = new_val
                         if verbose: print(f"  Action: Linear {idx} -> {new_val} neurones")
                         mutated = True
 
                 elif isinstance(layer, Conv2dCfg):
-                    # Choix aléatoire : Modifier Kernel OU Modifier Channels
+
                     if random.random() < 0.5:
-                        # Mutation Kernel (Taille du filtre)
-                        noise = random.choice([-2, 2]) # Passer de 3->5 ou 5->3
+                        noise = random.choice([-2, 2]) 
                         new_k = max(1, layer.kernel_size + noise)
                         if new_k != layer.kernel_size:
                             new_layers[idx].kernel_size = new_k
-                            # Important: Ajuster le padding pour éviter de trop réduire l'image
+                            
                             new_layers[idx].padding = new_k // 2 
                             if verbose: print(f"  Action: Conv {idx} -> Kernel {new_k}x{new_k}")
                             mutated = True
                     else:
-                        # Mutation Channels (Profondeur)
                         noise = random.choice([-8, 8, 16])
                         new_ch = max(4, layer.out_channels + noise)
                         if new_ch != layer.out_channels:
@@ -653,29 +654,20 @@ class NeuroOptimizer:
                             if verbose: print(f"  Action: Conv {idx} -> {new_ch} Channels")
                             mutated = True
 
-            # --- MUTATION 2 : AJOUTER COUCHE ---
             elif mutation_type == "add_layer":
-                # On choisit où insérer (aléatoire)
                 insert_idx = random.randint(0, len(new_layers) - 1)
 
-                # On décide si on ajoute un Conv ou un Linear
-                # Astuce: Si on est au début du réseau, plutôt Conv. À la fin, plutôt Linear.
 
-                # Pour faire simple : on copie une couche existante proche ou on crée par défaut
                 if insert_idx < len(new_layers) and isinstance(new_layers[insert_idx], Conv2dCfg):
-                    # Copie d'un Conv existant
                     new_layer = copy.copy(new_layers[insert_idx])
                 else:
-                    # Défaut Linear
                     new_layer = LinearCfg(in_features=1, out_features=32, activation=self.activation)
 
                 new_layers.insert(insert_idx, new_layer)
 
-                # Correction de la variable idx -> insert_idx
                 if verbose: print(f"  Action: Ajout couche à l'index {insert_idx}")
                 mutated = True
 
-            # --- MUTATION 3 : SUPPRIMER COUCHE ---
             elif mutation_type == "remove_layer" and len(modifiable_indices) > 1:
                 idx = random.choice(modifiable_indices)
                 del new_layers[idx]
@@ -685,13 +677,10 @@ class NeuroOptimizer:
             if not mutated:
                 continue
 
-            # CRITIQUE : Reconnexion intelligente
+
             new_layers = self._reconnect_layers(new_layers)
 
-            # ... (Le reste : création de temp_optimizer et évaluation est correct) ...
-            # ... (Copier-coller la fin de ton code existant ici) ...
 
-            # Juste pour être complet sur la fin du bloc try/except:
             temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
                                           Layers=new_layers, task=self.task)
             try:

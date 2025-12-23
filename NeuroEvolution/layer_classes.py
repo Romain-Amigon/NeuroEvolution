@@ -40,3 +40,11 @@ class MaxPool2dCfg:
     padding: int = 0
     dilation: int = 1
     ceil_mode: bool = False
+    
+@dataclass
+class GlobalAvgPoolCfg:
+    """
+    Effectue une moyenne sur chaque canal (H, W) -> (1, 1).
+    Transforme un tenseur (N, C, H, W) en (N, C), ce qui remplace le Flatten coûteux.
+    """
+    pass

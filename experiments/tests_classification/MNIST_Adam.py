@@ -21,14 +21,14 @@ from torchvision import datasets, transforms
 
 # Assurez-vous que ces imports fonctionnent avec votre structure de dossier
 from NeuroEvolution import NeuroOptimizer 
-from NeuroEvolution.layer_classes import Conv2dCfg, FlattenCfg, LinearCfg,MaxPool2dCfg, DropoutCfg
+from NeuroEvolution.layer_classes import Conv2dCfg, FlattenCfg, LinearCfg,MaxPool2dCfg, DropoutCfg, GlobalAvgPoolCfg
 
 # --- CONFIGURATION ---
 N_RUNS = 20          # Nombre d'itérations pour les statistiques
 OPTIMIZER = "Adam"   # On ne teste que Adam
 EPOCHS = 70          # Nombre d'époques par entraînement
 POPULATION = 30      
-EPOCHS_MODEL=20
+EPOCHS_MODEL=40
 def get_data_digits():
     digits = load_digits()
     X = torch.tensor(digits.images, dtype=torch.float32).unsqueeze(1) # (N, 1, 8, 8)
@@ -69,7 +69,6 @@ def evaluate_model(model, X, y):
     
     return acc, inf_time * 1000 
 
-# --- PRÉPARATION DES DATASETS ---
 DATASETS = [
     get_data_digits(),
     get_data_fashion_mnist() 
@@ -85,35 +84,31 @@ print(f"{'='*100}\n")
 for data_name, X, y in DATASETS:
     print(f" Dataset: {data_name} | Shape: {X.shape}")
     
- 
-    LAYERS= [
-        # --- BLOC 1 : Extraction de caractéristiques primaires (Bords, Lignes) ---
-        # Entrée : 28x28x1
-        Conv2dCfg(in_channels=1, out_channels=32, kernel_size=3, padding=1),
-        # Réduction : 28x28 -> 14x14
-        MaxPool2dCfg(kernel_size=2, stride=2),
+     
+    LAYERS = [
+
+        Conv2dCfg(in_channels=1, out_channels=32, kernel_size=3, padding=1, activation=nn.ReLU),
+
         
-        # --- BLOC 2 : Extraction de formes complexes (Boucles, Coins) ---
-        # Entrée : 14x14x32 -> Sortie : 14x14x64 (On augmente la profondeur quand l'image rétrécit)
-        Conv2dCfg(in_channels=32, out_channels=64, kernel_size=3, padding=1),
-        # Réduction : 14x14 -> 7x7
         MaxPool2dCfg(kernel_size=2, stride=2),
+
     
-        # --- CLASSIFICATION ---
+        Conv2dCfg(in_channels=32, out_channels=64, kernel_size=3, padding=1, activation=nn.ReLU),
+
+        
+        MaxPool2dCfg(kernel_size=2, stride=2),
+
         FlattenCfg(),
+
+
+        LinearCfg(in_features=(X.shape[2] // 4) * (X.shape[3] // 4) * 64, out_features=128, activation=nn.ReLU),
         
-        # Couche dense intermédiaire (Le "cerveau" qui interprète les formes)
-        # Calcul auto : 7 * 7 * 64 = 3136 entrées
-        LinearCfg(in_features=(X.shape[2] // 4) * (X.shape[3] // 4) * 64, out_features=256,activation=nn.ReLU),
-        
-        # Dropout pour éviter que le NAS ne crée un modèle qui apprend par cœur
-        DropoutCfg(p=0.25),
-        
-        # Sortie finale (10 classes pour FashionMNIST)
-        LinearCfg(in_features=256, out_features=10, activation=None) 
+        DropoutCfg(p=0.4), 
+        LinearCfg(in_features=128, out_features=10, activation=None)
     ]
 
-    # Listes pour stocker les résultats de chaque run
+
+
     acc_scores = []
     train_times = []
     inf_times = []
@@ -121,9 +116,7 @@ for data_name, X, y in DATASETS:
     print(f" Lancement de {N_RUNS} runs pour {OPTIMIZER}...")
 
     for i in range(N_RUNS):
-        # On recrée l'objet NeuroOptimizer à chaque boucle pour réinitialiser le split Train/Test
-        # Note: Si random_state est fixé à 42 dans votre classe, le split sera identique,
-        # mais l'initialisation des poids du réseau (DynamicNet) sera différente.
+
         neuro = NeuroOptimizer(X, y, task="classification", Layers=list(LAYERS))
         
         start_train = time.time()
@@ -136,7 +129,7 @@ for data_name, X, y in DATASETS:
         #    verbose=False
         #)
         
-        model=neuro.search_model( epochs=EPOCHS_MODEL, train_time=EPOCHS_MODEL*60, optimizer_name_weights='Adam', 
+        model=neuro.search_model( epochs=EPOCHS_MODEL, train_time=EPOCHS_MODEL*120, optimizer_name_weights='Adam', 
                          epochs_weights=EPOCHS,
                          verbose=False, verbose_weights=False, time_importance=None)
         

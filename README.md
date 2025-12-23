@@ -426,4 +426,27 @@ FashionMNIST (28x28)  WOA Weights (Fixed)    0.0925          1.5019        36.18
 FashionMNIST (28x28) Adam    20        83.00% ± 0.81% 0.847500           189.154225          213.330531
 
 ========================================================================================================================
+
+
+
+    
+LAYERS = [
+    Conv2dCfg(in_channels=1, out_channels=32, kernel_size=3, padding=1, activation=nn.ReLU),
+    MaxPool2dCfg(kernel_size=2, stride=2),
+    Conv2dCfg(in_channels=32, out_channels=64, kernel_size=3, padding=1, activation=nn.ReLU),
+    MaxPool2dCfg(kernel_size=2, stride=2),
+    FlattenCfg(),
+    LinearCfg(in_features=(X.shape[2] // 4) * (X.shape[3] // 4) * 64, out_features=128, activation=nn.ReLU),
+    DropoutCfg(p=0.4), 
+    LinearCfg(in_features=128, out_features=10, activation=None)
+]
+========================================================================================================================
+ RÉSULTATS STATISTIQUES FINAUX
+========================================================================================================================
+             Dataset Algo  Runs Accuracy (Mean ± Std)  Acc Max  Train Time Mean (s)  Inf Time Mean (ms)
+        Digits (8x8) Adam    50        98.62% ± 0.63%   1.0000             3.693523            5.815082
+FashionMNIST (28x28) Adam    50        84.46% ± 1.56%   0.8775            47.100273           74.207230
+
+========================================================================================================================
+
 ```
