@@ -67,7 +67,7 @@ def run_uci_benchmark():
     ]
 
     results_table = []
-    for opt in range(1) :#NeuroOptimizer.get_available_optimizers():
+    for opt in NeuroOptimizer.get_available_optimizers():
         for name, data in datasets:
             print(f"\n👉 Traitement du dataset : {name.upper()}")
             X, y = data.data, data.target
@@ -82,15 +82,8 @@ def run_uci_benchmark():
             
 
             start_train = time.time()
-            #model = neuro_opt.search_model(optimizer_name_weights=algo_choice, epochs=30)
-            model = neuro_opt.search_model(
-                hybrid=['GWO','Adam'],  hybrid_epochs=[10,10],
-                epochs=10,                   
-                train_time=60,             
-                epochs_weights=10,          
-                population_weights=20, 
-               
-            )
+            model = neuro_opt.search_model(optimizer_name_weights=algo_choice, epochs=30)
+
             train_time = time.time() - start_train
     
 
@@ -101,7 +94,7 @@ def run_uci_benchmark():
             with torch.no_grad():
                 logits = model(X_tensor)
                 _, preds = torch.max(logits, 1)
-                acc = accuracy_score(y_tensor.numpy(), preds.numpy())
+                acc = accuracy_score(y_tensor.cpu().numpy(), preds.cpu().numpy())
     
 
             metrics = Benchmark.measure_efficiency(model, (1, X.shape[1]))
