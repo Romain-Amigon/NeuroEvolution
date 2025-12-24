@@ -45,20 +45,20 @@ pip install NeuroEvolution
 ---
 ## Use
 
-layers :
-    -Conv2dCfg
-    -DropoutCfg
-    -FlattenCfg
-    -LinearCfg
-    -MaxPool2dCfg
-    -GlobalAvgPoolCfg
+### Layers
+- `Conv2dCfg`
+- `DropoutCfg`
+- `FlattenCfg`
+- `LinearCfg`
+- `MaxPool2dCfg`
+- `GlobalAvgPoolCfg`
 
-methods :
-    -search_weights : only weights of a model
-    -search_linear_model : only for MLP
-    -hybrid_search : use various algorithms for weights search
-    
-    -search_model : evolutionary model + possibility of hybrid search if list hybrid not empty
+### Methods
+- `search_weights` : only weights of a model
+- `search_linear_model` : only for MLP
+- `hybrid_search` : use various algorithms for weights search
+- `search_model` : evolutionary model + possibility of hybrid search if list `hybrid` not empty
+
 
 ---
 
