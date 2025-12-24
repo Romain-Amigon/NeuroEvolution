@@ -132,7 +132,7 @@ for data_name, X, y in DATASETS:
                          #epochs_weights=EPOCHS,
                          #verbose=False, verbose_weights=False, time_importance=None)
         model = neuro.search_model(
-            hybrid=['Adam'],  hybrid_epochs=[EPOCHS],
+            hybrid=['GWO','Adam'],  hybrid_epochs=[EPOCHS,EPOCHS],
             epochs=EPOCHS_MODEL,                   
             train_time=EPOCHS_MODEL*120,             
             population_weights=30, 

@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+NeuroEvolution/CNNoptimizer.py
+NeuroEvolution/RL.py
+NeuroEvolution/__init__.py
+NeuroEvolution/layer_classes.py
+NeuroEvolution/optimizer.py
+NeuroEvolution.egg-info/PKG-INFO
+NeuroEvolution.egg-info/SOURCES.txt
+NeuroEvolution.egg-info/dependency_links.txt
+NeuroEvolution.egg-info/requires.txt
+NeuroEvolution.egg-info/top_level.txt

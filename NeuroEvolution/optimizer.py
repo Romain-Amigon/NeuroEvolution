@@ -19,6 +19,14 @@ class DynamicNet(nn.Module):
     """
     A PyTorch Neural Network module that dynamically builds its architecture 
     based on a provided list of layer configurations.
+
+    This class serves as a flexible wrapper to instantiate models with varying
+    structures (Linear, Conv2d, Pooling, etc.) on the fly, which is essential
+    for Neural Architecture Search (NAS).
+
+    Args:
+        layers_cfg (list): A list of configuration objects (e.g., LinearCfg, Conv2dCfg)
+                           defining the sequence of layers.
     """
     def __init__(self, layers_cfg: list):
         super().__init__()
@@ -45,18 +53,52 @@ class DynamicNet(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
+        """
+        Defines the computation performed at every call.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The output of the sequential network.
+        """
         return self.net(x)
 
     def count_parameters(self):
+        """
+        Counts the total number of trainable parameters in the network.
+
+        Returns:
+            int: The total number of elements in all parameters.
+        """
         return sum(p.numel() for p in self.parameters())
 
     def flatten_weights(self, to_numpy=True, device=None):
+        """
+        Flattens all network parameters into a single vector.
+
+        Args:
+            to_numpy (bool, optional): If True, returns a NumPy array. If False,
+                                       returns a PyTorch tensor. Defaults to True.
+            device (torch.device, optional): The target device for the tensor if
+                                             returning a tensor. Defaults to None.
+
+        Returns:
+            np.ndarray or torch.Tensor: A 1D array/tensor containing all model weights.
+        """
         vec = parameters_to_vector(self.parameters())
         if to_numpy:
             return vec.detach().cpu().numpy()
         return vec.to(device) if device is not None else vec
 
     def load_flattened_weights(self, flat_weights):
+        """
+        Loads a flat vector of weights into the network's parameters.
+
+        Args:
+            flat_weights (np.ndarray or torch.Tensor): A 1D array or tensor representing
+                                                       the weights to load.
+        """
         if isinstance(flat_weights, np.ndarray):
             flat_weights = torch.as_tensor(flat_weights, dtype=torch.float32)
         
@@ -69,6 +111,20 @@ class DynamicNet(nn.Module):
             pass
 
     def evaluate_model(self, X, y, loss_fn=nn.MSELoss(), n_warmup=3, n_runs=20, verbose=False):
+        """
+        Evaluates the model on a given dataset, measuring loss and inference latency.
+
+        Args:
+            X (torch.Tensor): Input data.
+            y (torch.Tensor): Target labels or values.
+            loss_fn (nn.Module, optional): The loss function to use. Defaults to nn.MSELoss().
+            n_warmup (int, optional): Number of warm-up runs for timing. Defaults to 3.
+            n_runs (int, optional): Number of runs to calculate median inference time. Defaults to 20.
+            verbose (bool, optional): If True, prints evaluation results. Defaults to False.
+
+        Returns:
+            tuple: A tuple containing (loss_value, inference_time_in_seconds).
+        """
         model = self.net
         model.eval()
 
@@ -115,7 +171,18 @@ class DynamicNet(nn.Module):
 class NeuroOptimizer:
     """
     A controller class that manages data preparation and uses metaheuristic algorithms 
-    (or standard Adam) to optimize the weights of a neural network.
+    (or standard Adam) to optimize the weights of a neural network and search for
+    optimal architectures (Neuro-evolution / NAS).
+
+    Args:
+        X (np.ndarray): Input features.
+        y (np.ndarray): Target labels or values.
+        Layers (list, optional): Initial list of layer configurations. Defaults to None.
+        task (str, optional): The type of task, either 'classification' or 'regression'. 
+                              Defaults to "classification".
+        inference_time (float, optional): Maximum allowed inference time constraint. 
+                                          Defaults to infinity.
+        activation (nn.Module, optional): Default activation function class. Defaults to nn.ReLU.
     """
     def __init__(self, X, y, Layers=None, task="classification", inference_time=float('inf'), activation=nn.ReLU):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -164,6 +231,9 @@ class NeuroOptimizer:
 
     @staticmethod
     def print_available_optimizers():
+        """
+        Prints a table of available optimization algorithms and their strengths.
+        """
         algos = {
             "Adam": {"name": "Adaptive Moment Estimation", "strength": "Gradient-based (Backprop)."},
             "GWO":  {"name": "Grey Wolf Optimizer", "strength": "Balanced. Good general purpose."},
@@ -184,6 +254,19 @@ class NeuroOptimizer:
         print("="*110 + "\n")
 
     def evaluate(self, model, verbose=False, time_importance=None):
+        """
+        Evaluates the model performance on the test set.
+
+        Args:
+            model (DynamicNet): The neural network model to evaluate.
+            verbose (bool, optional): If True, prints accuracy/loss and time. Defaults to False.
+            time_importance (callable, optional): A function that weighs the trade-off between 
+                                                  performance and inference time. Defaults to None.
+
+        Returns:
+            float: The evaluation score. For classification, returns negative accuracy (for minimization) 
+                   unless time_importance is used. For regression, returns MSE.
+        """
         if next(model.parameters()).device.type != self.device:
             model = model.to(self.device)
             
@@ -216,9 +299,27 @@ class NeuroOptimizer:
 
     @staticmethod
     def get_available_optimizers():
+        """
+        Returns a list of available optimizer codes.
+
+        Returns:
+            list: List of strings representing optimizer codes.
+        """
         return ["Adam", "GWO", "PSO", "DE", "WOA", "GA", "ABC", "SMO", "SMA", "HHO"]
 
     def fitness_function(self, solution):
+        """
+        Calculates the fitness of a specific set of weights (solution).
+        
+        This method is used by the swarm intelligence algorithms. It loads weights
+        into the shared model and calculates loss on a mini-batch.
+
+        Args:
+            solution (np.ndarray): The flat vector of weights to evaluate.
+
+        Returns:
+            float: The loss value (fitness) to be minimized.
+        """
         # Use shared model instead of creating new one
         try:
             self.shared_model.load_flattened_weights(solution)
@@ -242,8 +343,21 @@ class NeuroOptimizer:
         return loss.item()
 
     def search_weights(self, optimizer_name='GWO', epochs=20, population=30, learning_rate=0.01, verbose=False):
+        """
+        Optimizes the weights of the current network architecture using a specified algorithm.
+
+        Args:
+            optimizer_name (str, optional): The name of the optimization algorithm ('Adam', 'GWO', etc.). 
+                                            Defaults to 'GWO'.
+            epochs (int, optional): Number of iterations/epochs. Defaults to 20.
+            population (int, optional): Population size for swarm algorithms. Defaults to 30.
+            learning_rate (float, optional): Learning rate for Adam optimizer. Defaults to 0.01.
+            verbose (bool, optional): If True, prints progress. Defaults to False.
+
+        Returns:
+            DynamicNet: The model with optimized weights.
+        """
         
-        # Ensure shared model architecture matches current config
         self.shared_model = DynamicNet(layers_cfg=self.Layers).to(self.device)
 
         if optimizer_name == "Adam":
@@ -255,7 +369,6 @@ class NeuroOptimizer:
             for epoch in range(epochs):
                 optimizer.zero_grad()
                 
-                # Batching for Adam as well
                 batch_size = 1024
                 if len(self.X_train) > batch_size:
                     indices = torch.randint(0, len(self.X_train), (batch_size,))
@@ -287,8 +400,8 @@ class NeuroOptimizer:
             "obj_func": self.fitness_function,
             "bounds": FloatVar(lb=lb, ub=ub),
             "minmax": "min",
-            "verbose": False,          
-            "log_to": None,            
+            "verbose": False,           
+            "log_to": None,             
             "save_population": False,
         }
 
@@ -330,6 +443,19 @@ class NeuroOptimizer:
         return dummy_model
 
     def _reconnect_layers(self, layers):
+        """
+        Re-calculates input/output dimensions for a list of layers to ensure connectivity.
+
+        This method performs a forward pass with dummy data to dynamically determine
+        tensor shapes (e.g., after a Conv2d or Flatten layer) and updates the
+        configuration objects accordingly.
+
+        Args:
+            layers (list): A list of layer configuration objects.
+
+        Returns:
+            list: A new list of layer configurations with corrected dimensions.
+        """
         new_layers = []
         
         if isinstance(self.n_features, tuple) or isinstance(self.n_features, list):
@@ -337,7 +463,6 @@ class NeuroOptimizer:
         else:
             dummy_input = torch.zeros(1, self.n_features)
             
-        # Helper to avoid connecting layers that don't match dimensions
         try:
             for i, cfg in enumerate(layers):
                 if isinstance(cfg, Conv2dCfg):
@@ -377,12 +502,29 @@ class NeuroOptimizer:
                     dummy_input = torch.flatten(dummy_input, 1) 
                     new_layers.append(cfg)
         except Exception:
-            pass # Skip invalid layer configurations
+            pass 
 
         return new_layers
 
-    def hybrid_search(self, train_time=float("inf"), optimizers=['Adam'], epochs=[10],
+    def hybrid_search(self, train_time=float("inf"), optimizers=['Adam'], epochs=[10], 
                       populations=20, learning_rate=0.01, verbose=False):
+        """
+        Performs a hybrid weight optimization using a sequence of different algorithms.
+
+        Args:
+            train_time (float, optional): Max training time (unused in current logic but reserved). 
+                                          Defaults to infinity.
+            optimizers (list, optional): List of optimizer names to run sequentially. 
+                                         Defaults to ['Adam'].
+            epochs (list, optional): List of epochs corresponding to each optimizer. 
+                                     Defaults to [10].
+            populations (int, optional): Population size for swarm algorithms. Defaults to 20.
+            learning_rate (float, optional): Learning rate for Adam. Defaults to 0.01.
+            verbose (bool, optional): If True, prints progress. Defaults to False.
+
+        Returns:
+            DynamicNet: The model optimized by the sequence of algorithms.
+        """
         if len(optimizers) != len(epochs):
             print('ERROR : optimizers and epochs not same length')
             return
@@ -422,12 +564,11 @@ class NeuroOptimizer:
                     "obj_func": self.fitness_function,
                     "bounds": FloatVar(lb=lb, ub=ub),
                     "minmax": "min",
-                    "verbose": False,          
-                    "log_to": None,            
+                    "verbose": False,           
+                    "log_to": None,             
                     "save_population": False,
                 }
                 
-                # Update shared model with current weights before starting swarm
                 self.shared_model.load_state_dict(current_model.state_dict())
                 
                 if optimizer_name == "GWO":
@@ -457,14 +598,41 @@ class NeuroOptimizer:
 
         return current_model
 
-    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, hybrid=[], hybrid_epochs=[],
-                     epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
+    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, hybrid=[], hybrid_epochs=[], 
+                     epochs_weights=10, population_weights=20, learning_rate_weights=0.01, 
                      verbose=False, verbose_weights=False, time_importance=None):
+        """
+        Executes the Neural Architecture Search (NAS) loop using hill-climbing mutations.
+
+        This method iteratively mutates the network structure (changing neurons, adding/removing layers),
+        re-trains weights, and evaluates performance to find the best architecture.
+
+        Args:
+            epochs (int, optional): Maximum number of NAS iterations. Defaults to 10.
+            train_time (int, optional): Maximum total runtime in seconds. Defaults to 300.
+            optimizer_name_weights (str, optional): Algorithm to optimize weights during NAS steps. 
+                                                    Defaults to 'GWO'.
+            accuracy_target (float, optional): Target accuracy to stop search early. Defaults to 0.99.
+            hybrid (list, optional): List of optimizers for hybrid weight training. Defaults to [].
+            hybrid_epochs (list, optional): Epochs for hybrid training. Defaults to [].
+            epochs_weights (int, optional): Epochs for single optimizer training. Defaults to 10.
+            population_weights (int, optional): Population size for swarm weight optimization. 
+                                                Defaults to 20.
+            learning_rate_weights (float, optional): Learning rate for gradient descent steps. 
+                                                     Defaults to 0.01.
+            verbose (bool, optional): If True, prints NAS progress. Defaults to False.
+            verbose_weights (bool, optional): If True, prints weight optimization details. 
+                                              Defaults to False.
+            time_importance (callable, optional): Metric to weight accuracy vs latency. Defaults to None.
+
+        Returns:
+            DynamicNet: The best found model architecture and weights.
+        """
 
         START = time.time()
-        if verbose: print(f"\n Démarrage de la recherche d'architecture (NAS)...")
+        if verbose: print(f"\n Start model search (NAS)...")
 
-        if verbose: print("  -> Évaluation de l'architecture de départ...")
+        if verbose: print("  -> Evaluating initial architecture...")
 
         if len(hybrid) > 0:
              start_model = self.hybrid_search(
@@ -487,14 +655,14 @@ class NeuroOptimizer:
         best_model = start_model
         best_layers = copy.deepcopy(self.Layers) 
 
-        if verbose: print(f"  -> Score initial : {best_score:.4f}")
+        if verbose: print(f"  -> Score : {best_score:.4f}")
 
         new_layers = copy.deepcopy(self.Layers) 
         ITER = 0
 
         while ITER < epochs and (time.time() - START) < train_time and best_score > -accuracy_target:
             ITER += 1
-            if verbose: print(f"\n[NAS Iteration {ITER}/{epochs}] Tentative de mutation...")
+            if verbose: print(f"\n[NAS Iteration {ITER}/{epochs}] Attempting mutation...")
 
             if rd.random() < 0.6: new_layers = copy.deepcopy(best_layers)
             else: new_layers = copy.deepcopy(new_layers) 
@@ -513,7 +681,7 @@ class NeuroOptimizer:
                     new_val = max(4, layer.out_features + noise)
                     if new_val != layer.out_features:
                         new_layers[idx].out_features = new_val
-                        if verbose: print(f"  Action: Linear {idx} -> {new_val} neurones")
+                        if verbose: print(f"  Action: Linear {idx} -> {new_val} neurons")
                         mutated = True
                 elif isinstance(layer, Conv2dCfg):
                     if rd.random() < 0.5:
@@ -533,19 +701,22 @@ class NeuroOptimizer:
                             mutated = True
 
             elif mutation_type == "add_layer":
-                insert_idx = rd.randint(0, len(new_layers) - 1)
+                if len(new_layers) > 0:
+                    insert_idx = rd.randint(0, len(new_layers) - 1)
+                else:
+                    insert_idx = 0
                 if insert_idx < len(new_layers) and isinstance(new_layers[insert_idx], Conv2dCfg):
                     new_layer = copy.copy(new_layers[insert_idx])
                 else:
                     new_layer = LinearCfg(in_features=1, out_features=32, activation=self.activation)
                 new_layers.insert(insert_idx, new_layer)
-                if verbose: print(f"  Action: Ajout couche à l'index {insert_idx}")
+                if verbose: print(f"  Action: Adding layer at index {insert_idx}")
                 mutated = True
 
             elif mutation_type == "remove_layer" and len(modifiable_indices) > 1:
                 idx = rd.choice(modifiable_indices)
                 del new_layers[idx]
-                if verbose: print(f"  Action: Suppression de la couche {idx}")
+                if verbose: print(f"  Action: Removing layer {idx}")
                 mutated = True
 
             if not mutated: continue
@@ -578,19 +749,19 @@ class NeuroOptimizer:
                      )
 
                 new_score = self.evaluate(temp_model, time_importance=time_importance)
-                if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
+                if verbose: print(f"  -> New Score : {new_score:.4f} (Best: {best_score:.4f})")
 
                 if new_score < best_score:
-                    if verbose: print(" AMÉLIORATION !")
+                    if verbose: print(" IMPROVEMENT !")
                     best_score = new_score
                     best_model = temp_model
                     best_layers = new_layers
                     self.Layers = best_layers
                 else:
-                    if verbose: print(" Rejeté.")
+                    if verbose: print(" Rejected.")
 
             except Exception as e:
-                if verbose: print(f"   Crash architecture : {e}")
+                if verbose: print(f"   Architecture crash : {e}")
 
-        print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
+        print(f"\nNAS Finished. Best Score : {best_score:.4f}")
         return best_model

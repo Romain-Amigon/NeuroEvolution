@@ -1,6 +1,6 @@
-# NeuroEvoluion
-NeurooEvoluion: Evolutionary Neural Architecture Search & Weight Optimization
-NeurooEvoluion is a high-level Python library designed to explore the intersection of Deep Learning and Metaheuristic Optimization. It allows users to optimize neural network weights using Swarm Intelligence (SI) and Evolutionary Algorithms (EA) instead of traditional Gradient Descent, and performs Neural Architecture Search (NAS) to discover efficient model structures dynamically.
+# NeuroEvolution
+NeuroEvolution: Evolutionary Neural Architecture Search & Weight Optimization
+NeuroEvolution is a high-level Python library designed to explore the intersection of Deep Learning and Metaheuristic Optimization. It allows users to optimize neural network weights using Swarm Intelligence (SI) and Evolutionary Algorithms (EA) instead of traditional Gradient Descent, and performs Neural Architecture Search (NAS) to discover efficient model structures dynamically.
 
 Built on top of PyTorch and Mealpy.
 
@@ -37,6 +37,30 @@ Training time
 Using Pareto dominance, the framework can identify optimal trade-offs instead of a single solution.
 
 ---
+## Installation
+
+```bash
+pip install NeuroEvolution
+```
+---
+## Use
+
+layers :
+    -Conv2dCfg
+    -DropoutCfg
+    -FlattenCfg
+    -LinearCfg
+    -MaxPool2dCfg
+    -GlobalAvgPoolCfg
+
+methods :
+    -search_weights : only weights of a model
+    -search_linear_model : only for MLP
+    -hybrid_search : use various algorithms for weights search
+    
+    -search_model : evolutionary model + possibility of hybrid search if list hybrid not empty
+
+---
 
 Supported Algorithms
 
@@ -54,6 +78,121 @@ Supported Algorithms
 | **ABC** | Artificial Bee Colony | Strong local search (fine-tuning). |
 ---
 
+## Example
+
+```python
+import torch.nn as nn
+from sklearn.datasets import make_moons
+from NeuroEvolution import NeuroOptimizer
+from NeuroEvolution.layer_classes import LinearCfg
+
+# 1. Prepare Data
+X, y = make_moons(n_samples=1000, noise=0.1, random_state=42)
+
+# 2. Define Architecture (Manually)
+# A simple MLP: Input(2) -> Linear(16) -> ReLU -> Linear(2)
+my_layers = [
+    LinearCfg(in_features=2, out_features=16, activation=nn.ReLU),
+    LinearCfg(in_features=16, out_features=2, activation=None) # Output dim = classes
+]
+
+# 3. Initialize Optimizer
+optimizer = NeuroOptimizer(
+    X, y, 
+    Layers=my_layers, 
+    task="classification"
+)
+
+# 4. Search for Weights using GWO (Grey Wolf Optimizer)
+print("Optimizing weights with GWO...")
+model = optimizer.search_weights(
+    optimizer_name='GWO', 
+    epochs=10, 
+    population=20,
+    verbose=True
+)
+
+# 5. Evaluate
+score = optimizer.evaluate(model, verbose=True)
+print(f"Final Accuracy: {-score:.2%}") # Note: Evaluate returns negative acc for minimization
+```
+
+```python
+import numpy as np
+from sklearn.datasets import make_moons
+from NeuroEvolution import NeuroOptimizer
+
+# 1. Define the Custom "Pareto" Function
+# The optimizer minimizes the returned value.
+# We want to MAXIMIZE accuracy and MINIMIZE latency.
+def pareto_time_importance(accuracy, inference_time):
+    """
+    Combines accuracy and inference time into a single score.
+    Penalizes models that are slower than a specific threshold.
+    """
+    # Threshold: We aim for inference under 2ms (0.002s)
+    target_latency = 0.002 
+    
+    # Penalty Weight: How strictly do we punish slowness?
+    # Higher alpha = Speed is more important than small accuracy gains.
+    alpha = 10.0 
+
+    # Calculate Penalty
+    # If time > 2ms, penalty increases. If time < 2ms, penalty is 0.
+    latency_penalty = max(0, (inference_time - target_latency) * alpha)
+
+    # Final Score Calculation:
+    # We minimize (-Accuracy + Penalty).
+    # Examples:
+    # Model A: Acc=0.99, Time=0.010s -> Score = -0.99 + (0.008 * 10) = -0.91 (Worse)
+    # Model B: Acc=0.98, Time=0.001s -> Score = -0.98 + 0            = -0.98 (Better)
+    return -accuracy + latency_penalty
+
+# 2. Load Data
+X, y = make_moons(n_samples=1000, noise=0.2, random_state=42)
+
+# 3. Initialize Optimizer
+optimizer = NeuroOptimizer(X, y, task="classification")
+
+# 4. Run NAS with the Time Constraint
+print("Starting NAS with Latency-Aware Optimization...")
+best_model = optimizer.search_model(
+    epochs=15,
+    train_time=600,
+    optimizer_name_weights='GWO',
+    epochs_weights=5,
+    verbose=True,
+    
+    # Pass your custom function here
+    time_importance=pareto_time_importance 
+)
+
+print(f"\nBest 'Efficient' Model Architecture:\n{best_model}")
+```
+
+```python
+from sklearn.datasets import make_circles
+from NeuroEvolution import NeuroOptimizer, LinearCfg
+import torch.nn as nn
+
+X, y = make_circles(n_samples=500, noise=0.05, factor=0.5)
+
+layers = [LinearCfg(2, 32, nn.ReLU), LinearCfg(32, 2, None)]
+optimizer = NeuroOptimizer(X, y, Layers=layers)
+
+# Hybrid Strategy:
+# 1. GWO finds a good starting region (Exploration)
+# 2. Adam fine-tunes the weights (Exploitation)
+model = optimizer.hybrid_search(
+    optimizers=['GWO', 'Adam'],
+    epochs=[10, 20],        # 10 epochs GWO, then 20 epochs Adam
+    populations=25,         # Only applies to GWO
+    learning_rate=0.01,     # Only applies to Adam
+    verbose=True
+)
+```
+
+---
 ## Benchmark : Classification 
 ### Iris, Wine & Breast Cancer
 
@@ -264,7 +403,7 @@ with torch.no_grad():
 
 ### fetch_california_housing, load_diabetes, make_friedman1
 
-'''md
+```md
 =========================================================================================================
 DATASET                   | ALGO       | R² SCORE (Max 1.0)   | MSE             | INF TIME (ms)  
 ---------------------------------------------------------------------------------------------------------
@@ -299,7 +438,7 @@ Friedman Non-Linear       | SMO        | 0.3631               | 14.8830         
 Friedman Non-Linear       | SMA        | 0.5366               | 10.8274         | 0.0000         
 Friedman Non-Linear       | HHO        | -0.1552              | 26.9935         | 0.0000         
 =========================================================================================================
-'''
+```
 
 
 ## Classification Image

@@ -50,12 +50,15 @@ if __name__ == "__main__":
             
             with torch.no_grad():
                 model.eval()
+                device = next(model.parameters()).device
+                # Move your input data to that same device
+                X_tensor_final = X_tensor_final.to(device)
                 start = time.time()
                 logits = model(X_tensor_final)
                 inf_time = time.time() - start
                 
                 _, predictions = torch.max(logits, 1)
-                acc = accuracy_score(y, predictions.numpy())
+                acc = accuracy_score(y, predictions.cpu().numpy())
                 
                 Res[opt].append((acc, inf_time))
             

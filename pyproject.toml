@@ -3,20 +3,21 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "neuroevo"
-version = "0.1.0"
+name = "NeuroEvolution"
+version = "0.1.1"
 description = "Neuro-evolution and model optimization toolkit"
-authors = [{ name="Romain" }]
+authors = [{ name="Romain Amigon" }]
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.0"
 
 dependencies = [
     "numpy",
     "torch",
     "scikit-learn",
     "mealpy",
-    "gymnasium"
+    "torchvision"
+
 ]
 
 [tool.setuptools.packages.find]
