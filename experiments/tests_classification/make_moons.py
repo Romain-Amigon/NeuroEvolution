@@ -33,19 +33,20 @@ if __name__ == "__main__":
         X_tensor_final = torch.tensor(X, dtype=torch.float32)
         y_tensor_final = torch.tensor(y, dtype=torch.float32)
 
-        for opt in NeuroOptimizer.get_available_optimizers():
+        for opt in ['GWO']:#NeuroOptimizer.get_available_optimizers()[:5]:
             print(f"   > Testing {opt}...", end="\r")
             
             neuro_opt = NeuroOptimizer(X, y, task="classification")
-
-            model = neuro_opt.search_linear_model(
-                optimizer_name_weights=opt, 
+            
+            model = neuro_opt.search_model(
+                hybrid=['GWO','Adam'],  hybrid_epochs=[10,10],
                 epochs=10,                   
                 train_time=60,             
                 epochs_weights=10,          
                 population_weights=20, 
                
             )
+            
             
             with torch.no_grad():
                 model.eval()

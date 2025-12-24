@@ -19,7 +19,6 @@ import pandas as pd
 from sklearn.datasets import load_digits
 from torchvision import datasets, transforms
 
-# Assurez-vous que ces imports fonctionnent avec votre structure de dossier
 from NeuroEvolution import NeuroOptimizer 
 from NeuroEvolution.layer_classes import Conv2dCfg, FlattenCfg, LinearCfg,MaxPool2dCfg, DropoutCfg, GlobalAvgPoolCfg
 
@@ -129,10 +128,16 @@ for data_name, X, y in DATASETS:
         #    verbose=False
         #)
         
-        model=neuro.search_model( epochs=EPOCHS_MODEL, train_time=EPOCHS_MODEL*120, optimizer_name_weights='Adam', 
-                         epochs_weights=EPOCHS,
-                         verbose=False, verbose_weights=False, time_importance=None)
-        
+        #model=neuro.search_model( epochs=EPOCHS_MODEL, train_time=EPOCHS_MODEL*120, optimizer_name_weights='Adam', 
+                         #epochs_weights=EPOCHS,
+                         #verbose=False, verbose_weights=False, time_importance=None)
+        model = neuro.search_model(
+            hybrid=['Adam'],  hybrid_epochs=[EPOCHS],
+            epochs=EPOCHS_MODEL,                   
+            train_time=EPOCHS_MODEL*120,             
+            population_weights=30, 
+           
+        )
         train_time = time.time() - start_train
         acc, inf_ms = evaluate_model(model, neuro.X_test, neuro.y_test)
         # Stockage

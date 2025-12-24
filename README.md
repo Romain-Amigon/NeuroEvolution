@@ -11,18 +11,47 @@ Gradient-Free Optimization: Train neural networks without backpropagation using 
 
 Dynamic Architecture Search (NAS): Automatically evolve network architectures (add/remove layers, adjust neurons/kernels) to find the best trade-off between performance and complexity.
 
+Hybrid Training Strategy Combine the global search capabilities of Metaheuristics with the local precision of Gradient Descent (Adam) to overcome the "curse of dimensionality" in deep networks.
+
 Hardware-Aware Evaluation: Optimize models not just for accuracy/loss, but also for Inference Latency using multi-objective fitness functions.
 
 Plug-and-Play: Seamless integration with Scikit-Learn style API (fit/predict paradigm).
 
 Wide Algorithm Support: Access to 10+ state-of-the-art metaheuristics via Mealpy.
 
+
+
+
+NeuroEvolution supports hardware-aware and multi-criteria optimization, including:
+
+Accuracy / Loss
+
+Inference latency
+
+Parameter count
+
+FLOPs
+
+Training time
+
+Using Pareto dominance, the framework can identify optimal trade-offs instead of a single solution.
+
 ---
 
 Supported Algorithms
 
-NeuroOpt wraps powerful metaheuristics provided by Mealpy.CodeAlgorithm NameBest Use CaseAdamAdaptive Moment EstimationBaseline. Large networks, images, high-dim data.GWOGrey Wolf OptimizerBalanced exploration/exploitation. General purpose.PSOParticle Swarm OptimizationFast convergence on simple landscapes.DEDifferential EvolutionRobust for noisy functions and regression.GAGenetic AlgorithmClassic evolutionary approach. Very robust.WOAWhale Optimization AlgorithmEscaping local minima via spiral search.SMASlime Mould AlgorithmHigh precision, adaptive weights.ABCArtificial Bee ColonyStrong local search (fine-tuning).
+`NeuroOptimizer` wraps powerful metaheuristics provided by Mealpy.
 
+| Code | Algorithm Name | Best Use Case |
+| :--- | :--- | :--- |
+| **Adam** | Adaptive Moment Estimation | Baseline. Large networks, images, high-dim data. |
+| **GWO** | Grey Wolf Optimizer | Balanced exploration/exploitation. General purpose. |
+| **PSO** | Particle Swarm Optimization | Fast convergence on simple landscapes. |
+| **DE** | Differential Evolution | Robust for noisy functions and regression. |
+| **GA** | Genetic Algorithm | Classic evolutionary approach. Very robust. |
+| **WOA** | Whale Optimization Algorithm | Escaping local minima via spiral search. |
+| **SMA** | Slime Mould Algorithm | High precision, adaptive weights. |
+| **ABC** | Artificial Bee Colony | Strong local search (fine-tuning). |
 ---
 
 ## Benchmark : Classification 
@@ -107,6 +136,23 @@ Breast Cancer       SMA         96.49          165.34        0.0451        0.30 
 Breast Cancer       HHO         96.49            7.70        0.0700        0.53     0.0005
 ====================================================================================================
 ```
+```md
+model = neuro_opt.search_model(
+    hybrid=['GWO','Adam'],  hybrid_epochs=[10,10],
+    epochs=10,                   
+    train_time=60,             
+    epochs_weights=10,          
+    population_weights=20, 
+)
+====================================================================================================
+Benchmarks
+====================================================================================================
+      Dataset  Algorithm  Accuracy (%)  Train Time (s)  Latency (ms)  Params (k)  FLOPs (M)
+         Iris   GWO+Adam        100.00            0.16        0.0400        0.13     0.0001
+         Wine   GWO+Adam        100.00            0.36        0.0453        0.43     0.0004
+Breast Cancer   GWO+Adam         97.37            1.81        0.0400        1.06     0.0010
+====================================================================================================
+```
 
 ### make_moons (n=2000, noise=0.3) | 20 Runs Average
 ```python
@@ -163,6 +209,23 @@ SMA             |   85.37%        | ±1.85%   |     0.6266 ms        |  88.65%
 Adam            |   84.99%        | ±1.00%   |     0.6017 ms        |  87.05%
 ====================================================================================================
 
+```
+
+
+```md
+model = neuro_opt.search_model(
+    hybrid=['GWO','Adam'],  hybrid_epochs=[10,10],
+    epochs=10,                   
+    train_time=60,             
+    epochs_weights=10,          
+    population_weights=20, 
+    
+)
+====================================================================================================
+ALGORITHM       | AVG ACCURACY    | STD DEV    | AVG INF TIME (ms)    | BEST ACC  
+----------------------------------------------------------------------------------------------------
+GWO  + Adam           |   90.40%        | ±0.85%   |     0.4511 ms        |  91.45%
+====================================================================================================
 ```
 
 ```python

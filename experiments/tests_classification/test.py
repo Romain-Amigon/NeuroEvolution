@@ -20,36 +20,42 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt 
     
 
-    X, y = make_classification(n_samples=2000, n_features=50, n_informative=5, n_classes=4)
+    X, y = make_classification(n_samples=2000, n_features=10, n_informative=5, n_classes=4)
     #X, y = make_blobs(n_samples=200)
-    X, y = make_moons(n_samples=2000, noise=0.3)
+
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32)
     
 
     """
     model = neuro_opt.search_linear_model(optimizer_name_weights='GWO', epochs=20,  train_time=10*60, epochs_weights=20, population_weights=20)
-    """
+   
     
     activation=nn.Tanh
     Layers = [
         LinearCfg(2,32,activation),
         LinearCfg(32,32,activation),
         LinearCfg(32, 2, None)
-    ]
+    ] """
 
     
     Res={}
-    neuro_opt = NeuroOptimizer(X, y, task="classification",Layers=Layers)
-    for opt in NeuroOptimizer.get_available_optimizers():
+    neuro_opt = NeuroOptimizer(X, y, task="classification")
+    for opt in range(10):
         
         
     
         #model = neuro_opt.search_weights(optimizer_name=opt, epochs=50, population=50)
         start=time.time()
-        model=neuro_opt.search_linear_model(optimizer_name_weights=opt, epochs=10,  train_time=60,
-                                     epochs_weights=10, population_weights=20,
-                                     time_importance=time_importance)
+        model= neuro_opt.search_model(
+            hybrid=['GWO','Adam'],  hybrid_epochs=[10,10],
+            epochs=10,                   
+            train_time=60,             
+            epochs_weights=10,          
+            population_weights=20,  time_importance=time_importance
+           
+        )
+                                    
         train_time=time.time()-start
         with torch.no_grad():
             start=time.time()

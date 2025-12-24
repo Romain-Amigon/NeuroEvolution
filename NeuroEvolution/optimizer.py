@@ -6,7 +6,6 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from mealpy import FloatVar
-
 from mealpy.swarm_based import GWO, PSO, WOA, ABC, SMO, HHO, SSA
 
 import random as rd
@@ -129,24 +128,6 @@ class DynamicNet(nn.Module):
             )
 
         return loss_value, inference_time
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -313,13 +294,12 @@ class NeuroOptimizer:
             learning_rate (float): Only used if optimizer_name is 'Adam'.
         """
 
-        # --- CAS SPÉCIAL : ADAM (Gradient Descent) ---
         if optimizer_name == "Adam":
             if verbose :print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
             model = DynamicNet(layers_cfg=self.Layers)
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-            model.train() # Mode entraînement pour Adam
+            model.train() 
             for epoch in range(epochs):
                 optimizer.zero_grad()
                 y_pred = model(self.X_train)
@@ -331,9 +311,7 @@ class NeuroOptimizer:
                 # if epoch % 10 == 0: print(f"Epoch {epoch}: Loss {loss.item():.4f}")
 
             if verbose :print(f"Finished! Final Train Loss: {loss.item():.4f}")
-            return model # On retourne directement le modèle entraîné
-
-        # --- CAS GÉNÉRAL : MÉTAHEURISTIQUES (Mealpy) ---
+            return model 
         dummy_model = DynamicNet(layers_cfg=self.Layers)
         n_params = dummy_model.count_parameters()
 
@@ -470,7 +448,7 @@ class NeuroOptimizer:
 
         return new_layers
 
-    def search_linear_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
+    def search_linear_model(self, epochs=10, train_time=float("inf"), optimizer_name_weights='GWO', accuracy_target=0.99, 
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
                      verbose=False, verbose_weights=False, time_importance=None):
         """
@@ -579,7 +557,7 @@ class NeuroOptimizer:
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
 
-    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, 
+    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, hybrid=[], hybrid_epochs=[],
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01,
                      verbose=False, verbose_weights=False, time_importance=None):
 
@@ -590,10 +568,23 @@ class NeuroOptimizer:
         if verbose: print(f"\n Démarrage de la recherche d'architecture (NAS)...")
 
 
-        start_model = self.search_weights(optimizer_name=optimizer_name_weights, 
-                                        epochs=epochs_weights, 
-                                        population=population_weights,
-                                        verbose=verbose_weights)
+        if len(hybrid) > 0:
+             start_model = self.hybrid_search(
+                 optimizers=hybrid, 
+                 epochs=hybrid_epochs, 
+                 populations=population_weights,
+                 learning_rate=learning_rate_weights, 
+                 verbose=verbose_weights
+             )
+        else:
+             # Sinon mode classique
+             start_model = self.search_weights(
+                 optimizer_name=optimizer_name_weights, 
+                 epochs=epochs_weights, 
+                 population=population_weights,
+                 learning_rate=learning_rate_weights,
+                 verbose=verbose_weights
+             )
 
         best_score = self.evaluate(start_model , time_importance=time_importance)
         best_model = start_model
@@ -684,9 +675,11 @@ class NeuroOptimizer:
             temp_optimizer = NeuroOptimizer(self.X_train.numpy(), self.y_train.numpy(), 
                                           Layers=new_layers, task=self.task)
             try:
-                temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
+                if len(hybrid) == 0 :temp_model = temp_optimizer.search_weights(optimizer_name=optimizer_name_weights, 
                                                          epochs=epochs_weights, 
                                                          population=population_weights)
+
+                else : temp_model=temp_optimizer.hybrid_search(optimizers=hybrid, epochs=hybrid_epochs, populations=population_weights)
 
                 new_score = self.evaluate(temp_model, time_importance=time_importance)
                 if verbose: print(f"  -> Nouveau Score : {new_score:.4f} (Best: {best_score:.4f})")
@@ -705,21 +698,90 @@ class NeuroOptimizer:
 
         print(f"\nFin du NAS. Meilleur Score : {best_score:.4f}")
         return best_model
+    
+    
+    def hybrid_search(self, train_time=float("inf"), optimizers=['Adam'], epochs=[10],
+                      populations=20, learning_rate=0.01,
+                     verbose=False):
+        if len(optimizers)!= len(epochs):
+            print('ERROR : optimizers and epochs not same length')
+            return
+        
+    
+        current_model = DynamicNet(layers_cfg=self.Layers)
+        n_params = current_model.count_parameters()
+
+        if verbose :print(f"Architecture defined. Number of weights to optimize: {n_params}")
 
 
 
 
+        lb = [-1.0] * n_params
+        ub = [ 1.0] * n_params
+    
+        problem = {
+                "obj_func": self.fitness_function,
+                "bounds": FloatVar(lb=lb, ub=ub),
+                "minmax": "min",
+                "verbose": False,         
+                "log_to": None,           
+                "save_population": False,
+            }
+    
+        term_dict = {
+           "max_early_stop": 25 
+        }
+    
+        for i in range(len(optimizers)):
+            
+            optimizer_name=optimizers[i]
+            
+            ep=epochs[i]
+            
+            if optimizer_name == "Adam":
+                if verbose :print(f"Starting Gradient Descent (Adam) for {epochs} epochs...")
+                optimizer = torch.optim.Adam(current_model.parameters(), lr=learning_rate)
 
+                current_model.train() 
+                for epoch in range(ep):
+                    optimizer.zero_grad()
+                    y_pred = current_model(self.X_train)
+                    loss = self.criterion(y_pred, self.y_train)
+                    loss.backward()
+                    optimizer.step()
 
+            else:
+                
+                
+                if optimizer_name == "GWO":
+                    model_opt = GWO.RW_GWO(epoch=ep, pop_size=populations)
+                elif optimizer_name == "PSO":
+                    model_opt = PSO.C_PSO(epoch=ep, pop_size=populations)
+                elif optimizer_name == "DE":
+                    model_opt = DE.JADE(epoch=ep, pop_size=populations) 
+                elif optimizer_name == "WOA":
+                    model_opt = WOA.OriginalWOA(epoch=ep, pop_size=populations)
+                elif optimizer_name == "GA":
+                    model_opt = GA.BaseGA(epoch=ep, pop_size=populations)
+                elif optimizer_name == "ABC":
+                    model_opt = ABC.OriginalABC(epoch=ep, pop_size=populations)
+                elif optimizer_name == "SMO": 
+                    model_opt = SMO.DevSMO(epoch=ep, pop_size=populations)
+                elif optimizer_name == "SMA": 
+                    model_opt = SMA.OriginalSMA(epoch=ep, pop_size=populations)
+                elif optimizer_name == "HHO": 
+                    model_opt = HHO.OriginalHHO(epoch=ep, pop_size=populations)
+                else:
+                    print(f"Algorithm {optimizer_name} unknown. Fallback to GWO.")
+                    model_opt = GWO.OriginalGWO(epoch=ep, pop_size=populations)
+    
+    
+    
+                best_agent = model_opt.solve(problem, termination=term_dict)
+                
+                current_model.load_flattened_weights(best_agent.solution)
+                
+                if verbose: print(f"   [{optimizer_name}] Best Fitness: {best_agent.target.fitness:.4f}")
 
-
-
-
-
-
-
-
-
-
-
+        return current_model
 
