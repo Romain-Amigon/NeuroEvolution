@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 from NeuroEvolution import  NeuroOptimizer
 import torch
-from NeuroEvolution.layer_classes import Conv2dCfg,DropoutCfg,FlattenCfg,LinearCfg
+from NeuroEvolution.layer_classes import Conv2dCfg,DropoutCfg,FlattenCfg,LinearCfg,MaxPool2dCfg
 import torch.nn as nn
 from sklearn.metrics import accuracy_score
 

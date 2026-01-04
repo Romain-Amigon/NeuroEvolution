@@ -36,6 +36,9 @@ Training time
 
 Using Pareto dominance, the framework can identify optimal trade-offs instead of a single solution.
 
+
+
+Partial Optimization Experiment: In an attempt to mitigate the curse of dimensionality, we tested applying metaheuristic algorithms solely to the last layer and randomly selected intermediate layers. This strategy proved suboptimal, producing results inferior to full-model training.
 ---
 ## Installation
 
@@ -44,6 +47,8 @@ pip install NeuroEvolution
 ```
 ---
 ## Use
+
+** Matérial used for benchmark :NVIDIA GeForce RTX 3060 Laptop GPU, 5 years old **
 
 ### Layers
 - `Conv2dCfg`

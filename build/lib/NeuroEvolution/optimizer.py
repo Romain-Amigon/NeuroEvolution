@@ -37,8 +37,12 @@ class ResidualWrapper(nn.Module):
         
         if self.projection is not None:
             identity = self.projection(identity)
-
+            
+        # Si les dimensions spatiales (H, W) ont changé (ex: Stride=2), 
+        # il faut aussi adapter 'identity' (souvent via AvgPool), 
+        # mais ici on suppose que le NAS gère le padding/stride correctement.
         if identity.shape != out.shape:
+            # Fallback de sécurité : on retourne juste out si l'addition est impossible
             return out 
             
         return out + identity

@@ -1,6 +1,5 @@
 README.md
 pyproject.toml
-NeuroEvolution/CNNoptimizer.py
 NeuroEvolution/RL.py
 NeuroEvolution/__init__.py
 NeuroEvolution/layer_classes.py
