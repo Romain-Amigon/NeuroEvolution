@@ -19,6 +19,8 @@ Plug-and-Play: Seamless integration with Scikit-Learn style API (fit/predict par
 
 Wide Algorithm Support: Access to 10+ state-of-the-art metaheuristics via Mealpy.
 
+Skip connection
+
 
 
 
@@ -36,6 +38,10 @@ Training time
 
 Using Pareto dominance, the framework can identify optimal trade-offs instead of a single solution.
 
+
+
+Partial Optimization Experiment: In an attempt to mitigate the curse of dimensionality, we tested applying metaheuristic algorithms solely to the last layer and randomly selected intermediate layers. This strategy proved suboptimal, producing results inferior to full-model training.
+
 ---
 ## Installation
 
@@ -44,6 +50,8 @@ pip install NeuroEvolution
 ```
 ---
 ## Use
+
+** Matérial used for benchmark :NVIDIA GeForce RTX 3060 Laptop GPU, 5 years old **
 
 ### Layers
 - `Conv2dCfg`
@@ -57,7 +65,8 @@ pip install NeuroEvolution
 - `search_weights` : only weights of a model
 - `search_linear_model` : only for MLP
 - `hybrid_search` : use various algorithms for weights search
-- `search_model` : evolutionary model + possibility of hybrid search if list `hybrid` not empty
+- `search_model` : search model + possibility of hybrid search if list `hybrid` not empty
+- `search_model_evolutionary`: evolutionnary search model + possibility of hybrid search if list `hybrid` not empty
 
 
 ---
@@ -188,6 +197,43 @@ model = optimizer.hybrid_search(
     epochs=[10, 20],        # 10 epochs GWO, then 20 epochs Adam
     populations=25,         # Only applies to GWO
     learning_rate=0.01,     # Only applies to Adam
+    verbose=True
+)
+```
+
+```python
+# Skip Connection
+layers = []
+
+layers.append(Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=nn.ReLU))
+layers.append(BatchNorm2dCfg(num_features=16)) 
+for _ in range(depth):
+
+    sub_block = [
+        Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=nn.ReLU),
+        BatchNorm2dCfg(num_features=16),
+        Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=None) 
+    ]
+        
+
+    layers.append(ResBlockCfg(sub_layers=sub_block))
+    layers.append(BatchNorm2dCfg(num_features=16)) 
+
+
+        
+layers.append(GlobalAvgPoolCfg())
+layers.append(LinearCfg(in_features=0, out_features=2, activation=None))
+```
+
+```python
+# Evolutionnary search model
+best_model = opt.search_model_evolutionary(
+    epochs=epochs,                
+    population_size=10,            
+    epochs_weights=40,          
+    optimizer_name_weights='Adam',
+    learning_rate_weights=0.01,
+    accuracy_target=target_acc,
     verbose=True
 )
 ```
@@ -652,3 +698,41 @@ FashionMNIST (28x28) Adam    50        84.46% ± 1.56%   0.8775            47.10
 ========================================================================================================================
 
 ```
+
+
+```python
+best_model = opt.search_model_evolutionary(
+    epochs=10,                
+    population_size=10,           
+    epochs_weights=40,             
+    optimizer_name_weights='Adam',
+    learning_rate_weights=0.01,
+    verbose=True
+)
+```
+
+```
+--- RESULTATS Digits (Image Classification) ---
+train time NAS : 10.14s
+Accuracy  : 91.39%
+Architecture :
+DynamicNet(
+  (net): Sequential(
+    (0): Flatten(start_dim=1, end_dim=-1)
+    (1): Linear(in_features=64, out_features=10, bias=True)
+  )
+)
+
+--- RESULTATS California Housing (Regression) ---
+train time NAS : 3.07s
+MSE Final       : 1.6875
+Architecture :
+DynamicNet(
+  (net): Sequential(
+    (0): Linear(in_features=8, out_features=5, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=5, out_features=1, bias=True)
+  )
+)
+
+
