@@ -41,6 +41,7 @@ Using Pareto dominance, the framework can identify optimal trade-offs instead of
 
 
 Partial Optimization Experiment: In an attempt to mitigate the curse of dimensionality, we tested applying metaheuristic algorithms solely to the last layer and randomly selected intermediate layers. This strategy proved suboptimal, producing results inferior to full-model training.
+
 ---
 ## Installation
 
