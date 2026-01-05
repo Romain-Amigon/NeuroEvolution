@@ -37,12 +37,8 @@ class ResidualWrapper(nn.Module):
         
         if self.projection is not None:
             identity = self.projection(identity)
-            
-        # Si les dimensions spatiales (H, W) ont changé (ex: Stride=2), 
-        # il faut aussi adapter 'identity' (souvent via AvgPool), 
-        # mais ici on suppose que le NAS gère le padding/stride correctement.
+
         if identity.shape != out.shape:
-            # Fallback de sécurité : on retourne juste out si l'addition est impossible
             return out 
             
         return out + identity
@@ -749,7 +745,7 @@ class NeuroOptimizer:
 
         return current_model
 
-    def search_model(self, epochs=10, train_time=300, optimizer_name_weights='GWO', accuracy_target=0.99, hybrid=[], hybrid_epochs=[], 
+    def search_model(self, epochs=10, train_time=float('inf'), optimizer_name_weights='GWO', accuracy_target=1, hybrid=[], hybrid_epochs=[], 
                      epochs_weights=10, population_weights=20, learning_rate_weights=0.01, 
                      verbose=False, verbose_weights=False, time_importance=None):
         """
@@ -916,3 +912,227 @@ class NeuroOptimizer:
 
         print(f"\nNAS Finished. Best Score : {best_score:.4f}")
         return best_model
+    
+
+    def _transfer_weights(self,parent_model, child_model):
+        """
+        Transfers the parent's weight to the child
+        """
+        parent_state = parent_model.state_dict()
+        child_state = child_model.state_dict()
+        
+        new_state = {}
+        for name, param in child_state.items():
+            if name in parent_state:
+                if parent_state[name].shape == param.shape:
+                    new_state[name] = parent_state[name]
+                else:
+
+                    new_state[name] = param
+            else:
+                new_state[name] = param
+                
+        child_model.load_state_dict(new_state)
+        return child_model
+    
+    def _mutate_layers_config(self, current_layers):
+
+        new_layers = copy.deepcopy(current_layers)
+        
+        mutation_type = rd.choice(["change_neurons", "add_layer", "remove_layer"])
+        modifiable_indices = [i for i, l in enumerate(new_layers[:-1]) if isinstance(l, (LinearCfg, Conv2dCfg))]
+
+        if not modifiable_indices and mutation_type != "add_layer":
+            return new_layers
+
+        if mutation_type == "change_neurons" and modifiable_indices:
+            idx = rd.choice(modifiable_indices)
+            layer = new_layers[idx]
+            
+            if isinstance(layer, LinearCfg):
+                noise = rd.randint(-16, 16)
+                new_val = max(4, layer.out_features + noise)
+                layer.out_features = new_val
+                
+            elif isinstance(layer, Conv2dCfg):
+                if rd.random() < 0.5: # Changer Kernel
+                    noise = rd.choice([-2, 2]) 
+                    new_k = max(1, layer.kernel_size + noise)
+                    layer.kernel_size = new_k
+                    layer.padding = new_k // 2 
+                else: # Changer Channels
+                    noise = rd.choice([-8, 8, 16]) 
+                    new_ch = max(4, layer.out_channels + noise)
+                    layer.out_channels = new_ch
+
+        elif mutation_type == "add_layer":
+            insert_idx = rd.randint(0, len(new_layers) - 1) if new_layers else 0
+            
+            if insert_idx < len(new_layers) and isinstance(new_layers[insert_idx], Conv2dCfg):
+                new_layer = copy.copy(new_layers[insert_idx])
+            else:
+                new_layer = LinearCfg(in_features=1, out_features=32, activation=self.activation)
+            
+            new_layers.insert(insert_idx, new_layer)
+
+        elif mutation_type == "remove_layer" and len(modifiable_indices) > 1:
+            idx = rd.choice(modifiable_indices)
+            del new_layers[idx]
+
+        return new_layers
+    
+    def search_model_evolutionary(self, epochs=10, train_time=float('inf'), population_size=10,
+                                  optimizer_name_weights='Adam', accuracy_target=1.0, 
+                                  hybrid=[], hybrid_epochs=[], epochs_weights=10, population_weights=20, 
+                                  learning_rate_weights=0.01, verbose=False, verbose_weights=False, 
+                                  time_importance=None):
+        """
+        Executes a Neural Architecture Search (NAS) using a Genetic Algorithm.
+        
+        This method evolves a population of neural network architectures over several generations.
+        For each architecture candidate, it creates a temporary optimizer instance to train 
+        and evaluate its weights (using either standard Adam or Swarm Intelligence).
+        It employs elitism and weight inheritance to accelerate convergence.
+
+        Args:
+            epochs (int): Number of NAS generations (iterations of the genetic algorithm).
+            train_time (int): Maximum total execution time in seconds (safety stop).
+            optimizer_name_weights (str): The optimizer used for weight training (e.g., 'Adam', 'GWO').
+            accuracy_target (float): The target accuracy (0.0 to 1.0) to stop the search early if reached.
+            hybrid (list[str]): List of optimizers for hybrid training sequence (e.g., ['Adam', 'GWO']).
+            hybrid_epochs (list[int]): Corresponding epochs for each optimizer in the hybrid list.
+            epochs_weights (int): Number of training epochs for each candidate model (Proxy Task).
+            population_weights (int): Size of the population (number of candidate models).
+            learning_rate_weights (float): Learning rate for the weight optimizer.
+            verbose (bool): If True, prints high-level NAS progress.
+            verbose_weights (bool): If True, prints detailed weight training logs.
+            time_importance (callable, optional): A function to weigh performance vs inference time.
+
+        Returns:
+            DynamicNet: The best found model architecture with optimized weights.
+        """
+        
+        START_TIME = time.time()
+        
+        if verbose:
+            print(f"\n[NAS-Evolutionary] Start config:")
+            print(f"  -> Generations (epochs): {epochs}")
+            print(f"  -> Population Size: {population_weights}")
+            print(f"  -> Training per model (epochs_weights): {epochs_weights}")
+            print(f"  -> Time Limit: {train_time}s")
+
+        population = []
+        for _ in range(population_size):
+            initial_layers = self._reconnect_layers(copy.deepcopy(self.Layers))
+            model = DynamicNet(initial_layers, input_shape=self.X_train.shape[1:]).to(self.device)
+            population.append(model)
+
+        best_global_model = None
+        best_global_score = -float('inf')
+
+        for gen in range(epochs):
+            if (time.time() - START_TIME) > train_time:
+                if verbose: print(f"\n[NAS-Evolutionary] Time limit reached ({train_time}s). Stopping.")
+                break
+
+            if verbose: print(f"\n--- Generation {gen+1}/{epochs} ---")
+            
+            scores = []
+            trained_population = [] 
+
+            for i, model in enumerate(population):
+                if (time.time() - START_TIME) > train_time: break
+
+
+                current_layers_cfg = model.layers_cfg
+
+
+                temp_optimizer = NeuroOptimizer(self.X_train.cpu().numpy(), self.y_train.cpu().numpy(), 
+                                                Layers=current_layers_cfg, task=self.task)
+                
+                temp_optimizer.device = self.device
+                temp_optimizer.X_train = temp_optimizer.X_train.to(self.device)
+                temp_optimizer.y_train = temp_optimizer.y_train.to(self.device)
+                
+
+                try:
+                    temp_optimizer.shared_model.load_state_dict(model.state_dict())
+                except Exception:
+                    pass 
+
+
+                if len(hybrid) > 0:
+                     temp_model = temp_optimizer.hybrid_search(
+                         optimizers=hybrid, epochs=hybrid_epochs, 
+                         populations=population_weights,
+                         learning_rate=learning_rate_weights, 
+                         verbose=verbose_weights
+                     )
+                else:
+                     temp_model = temp_optimizer.search_weights(
+                         optimizer_name=optimizer_name_weights, 
+                         epochs=epochs_weights, 
+                         population=population_weights, 
+                         learning_rate=learning_rate_weights, 
+                         verbose=verbose_weights
+                     )
+
+                score = self.evaluate(temp_model, time_importance=time_importance)
+                scores.append(score)
+                trained_population.append(temp_model)
+                
+                if score > best_global_score:
+                    best_global_score = score
+                    best_global_model = copy.deepcopy(temp_model)
+                    if verbose: print(f"  [Gen {gen+1} - Model {i}] New Best Score: {score:.4f}")
+
+            if abs(best_global_score) >= accuracy_target: 
+                 if self.task == "classification" and time_importance is None: 
+                     if verbose: print(f"\n[NAS-Evolutionary] Target accuracy reached ({accuracy_target}). Stopping.")
+                     break
+            
+            if (time.time() - START_TIME) > train_time: break
+
+            sorted_indices = np.argsort(scores)[::-1]
+            
+            elites_indices = sorted_indices[:2]
+            elites = [trained_population[i] for i in elites_indices]
+            
+            if verbose and len(scores) > 0: 
+                top_score = scores[sorted_indices[0]]
+                print(f"  Best of Gen {gen+1}: {top_score:.4f}")
+
+            new_population = []
+            
+            for elite in elites:
+                new_population.append(copy.deepcopy(elite))
+            
+            while len(new_population) < population_weights:
+                if len(sorted_indices) > 0:
+                    parent_idx = rd.choice(sorted_indices[:max(1, len(sorted_indices)//2)])
+                    parent_model = trained_population[parent_idx]
+                else:
+                    parent_model = trained_population[0]
+
+                child_layers_cfg = self._mutate_layers_config(parent_model.layers_cfg)
+                
+                try:
+                    child_layers_cfg = self._reconnect_layers(child_layers_cfg) 
+                except Exception:
+                    child_layers_cfg = copy.deepcopy(parent_model.layers_cfg)
+
+                child_model = DynamicNet(child_layers_cfg, input_shape=self.X_train.shape[1:]).to(self.device)
+                
+                child_model = self._transfer_weights(parent_model, child_model)
+                
+                new_population.append(child_model)
+            
+            population = new_population
+
+        if verbose: print(f"\n[NAS-Evolutionary] Finished. Best Global Score: {best_global_score:.4f}")
+        
+        if best_global_model is not None:
+            self.Layers = best_global_model.layers_cfg
+            return best_global_model
+        else:
+            return population[0]

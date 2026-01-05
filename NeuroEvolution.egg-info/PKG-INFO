@@ -33,6 +33,8 @@ Plug-and-Play: Seamless integration with Scikit-Learn style API (fit/predict par
 
 Wide Algorithm Support: Access to 10+ state-of-the-art metaheuristics via Mealpy.
 
+Skip connection
+
 
 
 
@@ -209,6 +211,30 @@ model = optimizer.hybrid_search(
     learning_rate=0.01,     # Only applies to Adam
     verbose=True
 )
+```
+
+```python
+# Skip Connection
+layers = []
+
+layers.append(Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=nn.ReLU))
+layers.append(BatchNorm2dCfg(num_features=16)) 
+for _ in range(depth):
+
+    sub_block = [
+        Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=nn.ReLU),
+        BatchNorm2dCfg(num_features=16),
+        Conv2dCfg(in_channels=0, out_channels=16, kernel_size=3, padding=1, activation=None) 
+    ]
+        
+
+    layers.append(ResBlockCfg(sub_layers=sub_block))
+    layers.append(BatchNorm2dCfg(num_features=16)) 
+
+
+        
+layers.append(GlobalAvgPoolCfg())
+layers.append(LinearCfg(in_features=0, out_features=2, activation=None))
 ```
 
 ---
